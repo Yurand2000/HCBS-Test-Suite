@@ -141,7 +141,7 @@ fn generate_interface_with_max_bw(taskset: &[RTTask], period: Time, step_size: T
                     .and_then(|resources| {
                         let per_core_util =
                             resources / (model.concurrency as f64 * model.period);
-                        if per_core_util >= max_per_core_bandwidth {
+                        if per_core_util <= max_per_core_bandwidth {
                             Ok(resources)
                         } else {
                             Err(Error::Generic(format!("Exceeded Max per-core BW: {:.2}", per_core_util)))
