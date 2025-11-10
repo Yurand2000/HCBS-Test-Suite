@@ -17,16 +17,11 @@ install: build
 
 # tasksets
 .PHONY: tasksets
-tasksets: $(BUILD)/tasksets/.keep
+tasksets: $(BUILD)/mnt/root/tasksets/.keep
 
-.PRECIOUS: $(BUILD)/tasksets/.keep
-$(BUILD)/tasksets/.keep: $(BUILD)/.keep
-	mkdir -p $(@D)
-	# get CARTS
-	if [ ! -d $(BUILD)/SchedTest ]; then\
-		tar -C $(BUILD) -xf $(shell pwd)/sched_test.tgz;\
-	fi
-	cd taskset_gen && BUILD=$(BUILD) python -B taskgen.py -o $(BUILD)/mnt/root/tasksets
+.PRECIOUS: $(BUILD)/mnt/root/tasksets/.keep
+$(BUILD)/mnt/root/tasksets/.keep: $(BUILD)/.keep
+	cargo run --bin taskset_gen --release -- -O $(BUILD)/mnt/root/tasksets
 	touch $@
 
 # test software

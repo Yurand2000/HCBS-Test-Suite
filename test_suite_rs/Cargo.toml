@@ -14,6 +14,7 @@ sysconf = "0.3.4"
 sysinfo = "0.37.0"
 crossbeam = "0.8.4"
 scheduler = "0.1.3"
+eva-engine ={ git = "https://github.com/Yurand2000/EVA-rt-Engine.git" }
 
 [features]
 cgroup_v2 = []
@@ -41,3 +42,7 @@ path = "src/bin/taskset/main.rs"
 [[bin]]
 name = "tools"
 path = "src/bin/tools/main.rs"
+
+[[bin]]
+name = "taskset_gen"
+path = "src/bin/taskset_gen/main.rs"

@@ -158,7 +158,7 @@ pub fn batch_test_success() {
 
 pub fn batch_test_success_details<T: std::fmt::Display>(msg: T) {
     batch_test_success();
-    
+
     if is_env_var_set("TERM_COLORS") {
         println!("\x1b[32m    Details: \x1b[0m{msg}");
     } else {
@@ -260,7 +260,7 @@ pub fn get_fair_server_avg_bw() -> Result<f64, Box<dyn std::error::Error>> {
                     .and_then(|value| value.trim().parse::<u64>()
                         .map_err(|err| format!("Error in parsing {entry}/runtime: {err}"))
                     )?;
-            let period: u64 = 
+            let period: u64 =
                 std::fs::read_to_string(format!("{entry}/period"))
                     .map_err(|err| format!("Error in reading {entry}/period: {err}"))
                     .and_then(|value| value.trim().parse::<u64>()
@@ -271,7 +271,7 @@ pub fn get_fair_server_avg_bw() -> Result<f64, Box<dyn std::error::Error>> {
             num_cpus += 1f64;
         }
     }
-    
+
     Ok(avg_bw / num_cpus)
 }
 
