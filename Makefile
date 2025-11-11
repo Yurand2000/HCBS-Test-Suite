@@ -21,7 +21,9 @@ tasksets: $(BUILD)/mnt/root/tasksets/.keep
 
 .PRECIOUS: $(BUILD)/mnt/root/tasksets/.keep
 $(BUILD)/mnt/root/tasksets/.keep: $(BUILD)/.keep
-	cargo run --bin taskset_gen --release -- -O $(BUILD)/mnt/root/tasksets
+	CARGO_HOME=$(CARGO_HOME) \
+		CARGO_TARGET_DIR=$(CARGO_TARGET_DIR) \
+		cargo run --bin taskset_gen --release -- -O $(BUILD)/mnt/root/tasksets
 	touch $@
 
 # test software

@@ -45,7 +45,7 @@ pub struct TasksetGeneratorArgs {
     pub max_task_period_ms: u64,
 
     /// Period granularity of a task
-    #[arg(long="p-gran", default_value="200", value_name="PERIOD ms")]
+    #[arg(long="p-gran", default_value="10", value_name="PERIOD ms")]
     pub step_task_period_ms: u64,
 
     /// Minimum taskset total utilization
@@ -65,7 +65,7 @@ pub struct TasksetGeneratorArgs {
 #[derive(clap::Args)]
 pub struct AnalysisArgs {
     /// Minimum cgroup period
-    #[arg(short='c', default_value="20", value_name="PERIOD ms")]
+    #[arg(short='c', default_value="10", value_name="PERIOD ms")]
     pub min_cgroup_period_ms: u64,
 
     /// Maximum cgroup period
@@ -73,12 +73,20 @@ pub struct AnalysisArgs {
     pub max_cgroup_period_ms: u64,
 
     /// Cgroup period granularity
-    #[arg(long="c-gran", default_value="40", value_name="PERIOD ms")]
+    #[arg(long="c-gran", default_value="30", value_name="PERIOD ms")]
     pub step_cgroup_period_ms: u64,
 
     /// Max bandwidth per core in cgroup
     #[arg(long="max-core-bw", default_value="0.9", value_name="BANDWIDTH")]
     pub max_per_core_bandwidth: f64,
+
+    /// Analysis precision
+    #[arg(long="precision", default_value="1000.0", value_name="PRECISION ns")]
+    pub precision: f64,
+
+    /// Max CPUs
+    #[arg(long="max-cpus", default_value="16", value_name="# CPUs")]
+    pub max_cpus: u64,
 }
 
 #[derive(Debug, Clone)]
@@ -122,6 +130,10 @@ impl Into<AnalysisOptions> for AnalysisArgs {
             ),
             max_per_core_bandwidth:
                 self.max_per_core_bandwidth,
+            max_cores:
+                self.max_cpus,
+            precision:
+                Time::nanos(self.precision),
         }
     }
 }

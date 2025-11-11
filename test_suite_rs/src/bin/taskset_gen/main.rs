@@ -23,16 +23,13 @@ fn main() {
         .into_iter()
         .enumerate()
         .map(|(n, taskset)| {
-            println!("Generating configs for taskset {}/{}", n + 1, tasksets_num);
+            print!("Generating configs for taskset {}/{}\r", n + 1, tasksets_num);
+            std::io::Write::flush(&mut std::io::stdout()).unwrap();
 
             let configs = generator::generate_config(&taskset, &analysis_opts);
             (taskset, configs)
         })
         .for_each(|(taskset, configs)| {
-            if configs.is_empty() {
-                return;
-            }
-
             let taskset_dir = format!("{}/{}", &args.output.out_directory, &taskset.name);
 
             std::fs::create_dir_all(&taskset_dir).unwrap();

@@ -24,19 +24,23 @@ pub fn generate_tasksets(
     rng_seed: u64,
 ) -> Vec<NamedTaskset> {
     let seed = std::sync::atomic::AtomicU64::new(rng_seed);
+    let count = std::sync::atomic::AtomicU64::new(0);
     let (num_tasks_min, num_tasks_max) = options.num_tasks;
     let (util_min, util_max, util_step) = options.taskset_utilization;
-    let (time_min, time_max, time_step) = options.task_period_ms;
+    let (period_min, period_max, period_step) = options.task_period_ms;
 
     float_iter(util_min, util_max, util_step)
     .flat_map(|taskset_util| {
         std::iter::repeat_n(taskset_util, options.tasksets_per_utilization as usize)
-        .enumerate()
-        .flat_map(|(n, taskset_util)| {
-            let num_tasks =
+        .map(|taskset_util| {
+            let taskset_num = count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+
+            let mut rng =
                 <rand::rngs::StdRng as rand::SeedableRng>::seed_from_u64(
                     seed.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
-                ).random_range(num_tasks_min ..= num_tasks_max) as usize;
+                );
+
+            let num_tasks = rng.random_range(num_tasks_min ..= num_tasks_max) as usize;
 
             let utils =
                 loop {
@@ -49,27 +53,25 @@ pub fn generate_tasksets(
                     }
                 };
 
-            float_iter(
-                time_min.as_nanos(),
-                time_max.as_nanos(),
-                time_step.as_nanos()
-            ).map(move |period| {
-                let period = Time::nanos(period);
+            let period_diff = (period_max - period_min) / period_step;
 
-                NamedTaskset {
-                    name: format!("taskset_U{:.1}_N{:02}_{:03}",
-                                    taskset_util, num_tasks, n),
-                    tasks: utils.iter().map(|util| {
-                            let util = (util * 100.0).floor() / 100.0;
+            NamedTaskset {
+                name: format!("taskset_U{:.1}_N{:02}_{:03}",
+                                taskset_util, num_tasks, taskset_num),
+                tasks: utils.iter().map(|util| {
+                        let util = (util * 100.0).floor() / 100.0;
+                        let period = (
+                            rng.random_range(0.0 .. period_diff).floor()
+                                * period_step + period_min
+                            ).floor();
 
-                            RTTask {
-                                wcet: (util * period).floor(),
-                                deadline: period,
-                                period: period,
-                            }
-                        }).collect(),
-                }
-            })
+                        RTTask {
+                            wcet: (util * period).floor(),
+                            deadline: period,
+                            period: period,
+                        }
+                    }).collect(),
+            }
         })
     })
     .collect()
@@ -79,22 +81,25 @@ pub fn generate_tasksets(
 pub struct AnalysisOptions {
     pub cgroup_period: (Time, Time, Time),
     pub max_per_core_bandwidth: f64,
+    pub max_cores: u64,
+    pub precision: Time,
 }
 
 pub fn generate_config(
     taskset: &NamedTaskset,
     options: &AnalysisOptions,
 ) -> Vec<MPRModel> {
-    (
-        options.cgroup_period.0.as_nanos() as usize
-            ..=
-        options.cgroup_period.1.as_nanos() as usize
-    )
-        .step_by(options.cgroup_period.2.as_nanos() as usize)
-        .flat_map(|period| {
-            let period = Time::nanos(period as f64);
+    let (period_min, period_max, period_step) = options.cgroup_period;
 
-            generate_interface_with_max_bw(&taskset.tasks, period, Time::nanos(100.0), options.max_per_core_bandwidth).ok()
+    time_iter(period_min, period_max, period_step)
+        .flat_map(|period| {
+            generate_interface_with_max_bw(
+                &taskset.tasks,
+                period,
+                options.precision,
+                options.max_cores,
+                options.max_per_core_bandwidth,
+            ).ok()
         })
         .collect()
 }
@@ -106,9 +111,22 @@ fn float_iter(min: f64, max: f64, step: f64) -> impl Iterator<Item = f64>
         .take_while(move |&v| v <= max)
 }
 
+fn time_iter(min: Time, max: Time, step: Time) -> impl Iterator<Item = Time>
+{
+    std::iter::repeat(min).enumerate()
+        .map(move |(n, v)| v + (n as f64) * step)
+        .take_while(move |&v| v <= max)
+}
+
 // Custom Generator from Eva-Engine
 
-fn generate_interface_with_max_bw(taskset: &[RTTask], period: Time, step_size: Time, max_per_core_bandwidth: f64) -> Result<MPRModel, Error> {
+fn generate_interface_with_max_bw(
+    taskset: &[RTTask],
+    period: Time,
+    step_size: Time,
+    max_cores: u64,
+    max_per_core_bandwidth: f64,
+) -> Result<MPRModel, Error> {
     use eva_engine::analyses::multiprocessor_periodic_resource_model::*;
 
     AnalysisUtils::assert_constrained_deadlines(taskset)?;
@@ -119,7 +137,8 @@ fn generate_interface_with_max_bw(taskset: &[RTTask], period: Time, step_size: T
         period,
         generic::GenerationStrategy::MonotoneLinearSearch,
         num_processors_lower_bound,
-        num_processors_upper_bound, // ?
+        |taskset|
+            u64::min(num_processors_upper_bound(taskset), max_cores),
         |taskset, model|
             generic::minimum_required_resource(
                 taskset,
@@ -137,17 +156,17 @@ fn generate_interface_with_max_bw(taskset: &[RTTask], period: Time, step_size: T
                             resource_from_linear_sbf(demand, interval, model.period, model.concurrency),
                         |_, _, _, _| Ok(Time::zero()),
                         |_, _, _, _, _| true,
-                    )
-                    .and_then(|resources| {
-                        let per_core_util =
-                            resources / (model.concurrency as f64 * model.period);
-                        if per_core_util <= max_per_core_bandwidth {
-                            Ok(resources)
-                        } else {
-                            Err(Error::Generic(format!("Exceeded Max per-core BW: {:.2}", per_core_util)))
-                        }
-                    }),
-                bcl_2009::is_schedulable_fp
+                    ),
+                |taskset, model| {
+                    let per_core_util =
+                        model.resource / (model.concurrency as f64 * model.period);
+
+                    if per_core_util > max_per_core_bandwidth {
+                        Ok(false)
+                    } else {
+                        bcl_2009::is_schedulable_fp(taskset, model)
+                    }
+                }
             )
     )
 }
