@@ -10,7 +10,6 @@ Rust-based tests for [Hierarchical Constant Bandwidth Server](https://github.com
 - **Git**
 - **GCC**
 - **Rust**: ≥1.89.0-nightly
-- **Python3**
 
 ### Installation
 
@@ -89,7 +88,8 @@ Usage: tools <COMMAND>
 
 Commands:
   hog              CPU hog
-  mount-cgroup-fs  Mount CGroup filesystem and CPU controller
+  mount-cgroup-fs  Mount CGroup filesystem
+  mount-cgroup-cpu Mount CGroup filesystem and CPU controller
   mount-debug-fs   Mount DebugFS
   rt-bw-change     Change the global badwidth limits of real-time tasks
                    (both FIFO/RR and DEADLINE)
@@ -117,19 +117,21 @@ Stress tests are designed to repeatedly invoke the scheduler in all the exposed 
 
 These basic time tests are just a benchmark to assert that the HCBS mechanism works correctly, by starting a bunch of processes inside a cgroup and confirming that they consumed their expected amount of bandwidth.
 
-### 5. Taskset (🔧 WIP ⚙️)
+### 5. Taskset
 
 Taskset tests are more complex: given a set of (generated) periodic tasks and their bandwidth requirements, schedulability analyses are performed to decide whether or not a given hardware configuration can run the taskset. In particular, for each taskset, a HCBS's cgroup configuration along with the number of necessary CPUs is generated. These are mathematically guaranteed to be schedulable.
 
 The next step of this test suite is to configure cgroups as computed and to run the taskset, to verify that the HCBS implementation works as intended and that the scheduling overheads are within reasonable bounds.
 
-#### NOTES:
+### A. Extras
 
-The current analyzer software is closed source, so the tasksets for the tests are provided separately [here](https://github.com/Yurand2000/HCBS-Test-Suite/releases/tag/250924). As a future *to-do*, the analyzer software will be rewritten to be open source.
+#### 1. Taskset Generator
 
-### Extra Tools
+The **taskset_gen** executable can be used to generate a suite of syntetic tasksets to be used by the **taskset** executable.
 
-The extra **tools** executable exposes a number of QoL features to simplify the setup/use of HCBS and related features. Currently (2025-09-23) it provides:
+#### 2. Tools
+
+The extra **tools** executable exposes a number of QoL features to simplify the setup/use of HCBS and related features. Currently (2025-11-11) it provides:
 
 - **CPU hog**
 - **Mounting of the cgroup's filesystem**
@@ -153,7 +155,7 @@ This project is licensed under the GNU General Public License v3 - see the [LICE
 ## 📝 TODO - Future Work
 
 - [ ] **More Tests**: The repository will be updated with new tests, as the HCBS patches continue to evolve.
-- [ ] **Rewrite Taskset Analyzer**: The taskset generation software is currently closed source, but I plan to rewrite it to include newer algorithms and make it open source.
+- [X] **Rewrite Taskset Analyzer**: The taskset generation software is currently closed source, but I plan to rewrite it to include newer algorithms and make it open source.
 - [ ] **Rewrite Periodic Task in Rust**: Currently the periodic_task and periodic_thread binaries come from another git repository and are written in C. This would remove the need for the C compiler (only non BusyBox builds).
 
 ---
