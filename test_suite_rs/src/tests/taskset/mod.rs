@@ -27,7 +27,7 @@ pub struct MyArgsSpecific {
     #[arg(short = 'C', long = "config", value_name = "path")]
     pub config: String,
 
-    /// output file 
+    /// output file
     #[arg(short = 'O', long = "output", value_name = "path")]
     pub output: String,
 }
@@ -124,7 +124,7 @@ fn __os_str_to_str(string: &std::ffi::OsStr) -> Result<String, Box<dyn std::erro
 }
 
 fn __path_to_str(path: &std::path::Path) -> Result<String, Box<dyn std::error::Error>> {
-    __os_str_to_str(path.to_path_buf().as_os_str()) 
+    __os_str_to_str(path.to_path_buf().as_os_str())
 }
 
 fn run_taskset(run: TasksetRun, args: &MyArgs, cycles: Option<u64>)
@@ -175,7 +175,7 @@ fn run_taskset(run: TasksetRun, args: &MyArgs, cycles: Option<u64>)
 
     let mut proc = run_periodic_thread(pthread_data)?;
     proc.wait()?;
-    
+
     set_cpuset_to_pid(std::process::id(), &CpuSet::all()?)?;
     set_scheduler(std::process::id(), SchedPolicy::other())?;
     migrate_task_to_cgroup(".", std::process::id())?;
@@ -212,7 +212,7 @@ fn run_taskset(run: TasksetRun, args: &MyArgs, cycles: Option<u64>)
 }
 
 fn compute_insights(run: &TasksetRun, args: &MyArgs) -> TasksetRunInsights {
-    let expected_runtime_us = 
+    let expected_runtime_us =
         run.tasks.data.iter()
         .map(|task| task.period_ms * args.num_instances_per_job * 1000)
         .max().unwrap();
@@ -221,7 +221,7 @@ fn compute_insights(run: &TasksetRun, args: &MyArgs) -> TasksetRunInsights {
 }
 
 fn compute_result_insights(run: &TasksetRunResult) -> TasksetRunResultInsights {
-    let (num_overruns, worst_overrun) = 
+    let (num_overruns, worst_overrun) =
         run.results.iter()
         .fold((0u64, f64::NEG_INFINITY), |(mut num_overruns, worst_overrun), job_instance| {
             if job_instance.deadline_offset > 0f64 { num_overruns+= 1; }
@@ -298,8 +298,8 @@ fn get_tasksets_runs(args: &MyArgsAll) -> Result<Vec<TasksetRun>, Box<dyn std::e
             Err(format!("taskset.txt file not found for taskset {}", taskset_dir))?;
         }
 
-        if files.len() == 1 {
-            Err(format!("taskset {} has no run configurations", taskset_dir))?;
+        if files.len() <= 1 {
+            continue;
         }
 
         let taskset = parse_taskset_file(&format!("{taskset_dir}/taskset.txt"))?;
@@ -363,7 +363,7 @@ fn compute_cpu_speed() -> Result<u64, Box<dyn std::error::Error>> {
         out_file: out_file.clone(),
     })?;
     proc.wait()?;
-    
+
     set_cpuset_to_pid(std::process::id(), &CpuSet::all()?)?;
     set_scheduler(std::process::id(), SchedPolicy::other())?;
 

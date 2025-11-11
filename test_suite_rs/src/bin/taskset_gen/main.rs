@@ -41,7 +41,7 @@ fn main() {
 
             for (i, config) in configs.iter().enumerate() {
                 std::fs::write(
-                    format!("{}/{:03}.txt", taskset_dir, i),
+                    format!("{}/config_{:03}.txt", taskset_dir, i),
                     config_to_string(&config),
                 ).unwrap();
             }

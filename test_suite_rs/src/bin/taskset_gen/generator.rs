@@ -54,23 +54,27 @@ pub fn generate_tasksets(
                 };
 
             let period_diff = (period_max - period_min) / period_step;
+            let mut tasks: Vec<_> =
+                utils.into_iter().map(|util| {
+                    let util = (util * 100.0).floor() / 100.0;
+                    let period = (
+                        rng.random_range(0.0 .. period_diff).floor()
+                            * period_step + period_min
+                        ).floor();
+
+                    RTTask {
+                        wcet: (util * period).floor(),
+                        deadline: period,
+                        period: period,
+                    }
+                }).collect();
+
+            tasks.sort_by_key(|task| task.period);
 
             NamedTaskset {
                 name: format!("taskset_U{:.1}_N{:02}_{:03}",
                                 taskset_util, num_tasks, taskset_num),
-                tasks: utils.iter().map(|util| {
-                        let util = (util * 100.0).floor() / 100.0;
-                        let period = (
-                            rng.random_range(0.0 .. period_diff).floor()
-                                * period_step + period_min
-                            ).floor();
-
-                        RTTask {
-                            wcet: (util * period).floor(),
-                            deadline: period,
-                            period: period,
-                        }
-                    }).collect(),
+                tasks: tasks,
             }
         })
     })
