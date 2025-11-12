@@ -36,7 +36,7 @@ impl Drop for MyProcess {
 
 impl Deref for MyProcess {
     type Target = std::process::Child;
-    
+
     fn deref(&self) -> &Self::Target {
         &self.process
     }
