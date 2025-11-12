@@ -9,7 +9,7 @@ install-tar: $(BUILD)/install.tar.gz
 
 # Taskset builder is currently under costruction
 # build: cgroup periodic scripts tasksets
-build: cgroup periodic scripts
+build: cgroup periodic rt-app scripts
 
 install: build
 	mkdir -p $(O)
@@ -92,6 +92,39 @@ $(BUILD)/mnt/root/bin/periodic_thread: $(BUILD)/PeriodicTask/.keep
 	make -C $(<D) periodic_thread
 	mkdir -p $(@D)
 	cp -u $(<D)/periodic_thread $@
+
+# rt-app task runner
+.PHONY: rt-app
+rt-app: $(BUILD)/mnt/root/bin/rt-app
+
+$(BUILD)/rt-app/json-c/.keep: $(BUILD)/.keep
+	git init $(@D)
+	git -C $(@D) fetch --depth=1 \
+		https://github.com/json-c/json-c
+	git -C $(@D) checkout FETCH_HEAD
+	mkdir $(@D)/build
+	cd $(@D)/build; \
+		cmake ..; \
+		make
+	touch $@
+
+$(BUILD)/rt-app/rt-app/.keep: $(BUILD)/.keep $(BUILD)/rt-app/json-c/.keep
+	git init $(@D)
+	git -C $(@D) fetch --depth=1 \
+		http://github.com/scheduler-tools/rt-app
+	git -C $(@D) checkout FETCH_HEAD
+	cd $(@D); \
+		export ac_cv_lib_json_c_json_object_from_file=yes; \
+    	export ac_cv_lib_numa_numa_available=no; \
+		./autogen.sh; \
+    	./configure --host=aarch64-linux-gnu \
+			LDFLAGS="-L$(BUILD)/rt-app/json-c/build" \
+			CFLAGS="-I$(BUILD)/rt-app"; \
+    	AM_LDFLAGS="-all-static" make
+	touch $@
+
+$(BUILD)/mnt/root/bin/rt-app: $(BUILD)/rt-app/rt-app/.keep
+	cp $(BUILD)/rt-app/rt-app/src/rt-app $@
 
 # busybox (only for initramfs)
 .PHONY: busybox
