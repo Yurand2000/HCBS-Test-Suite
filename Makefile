@@ -102,10 +102,7 @@ $(BUILD)/rt-app/json-c/.keep: $(BUILD)/.keep
 	git -C $(@D) fetch --depth=1 \
 		https://github.com/json-c/json-c
 	git -C $(@D) checkout FETCH_HEAD
-	mkdir $(@D)/build
-	cd $(@D)/build; \
-		cmake ..; \
-		make
+	cd $(@D); cmake .; make
 	touch $@
 
 $(BUILD)/rt-app/rt-app/.keep: $(BUILD)/.keep $(BUILD)/rt-app/json-c/.keep
@@ -118,8 +115,8 @@ $(BUILD)/rt-app/rt-app/.keep: $(BUILD)/.keep $(BUILD)/rt-app/json-c/.keep
     	export ac_cv_lib_numa_numa_available=no; \
 		./autogen.sh; \
     	./configure --host=aarch64-linux-gnu \
-			LDFLAGS="-L$(BUILD)/rt-app/json-c/build" \
-			CFLAGS="-I$(BUILD)/rt-app"; \
+			LDFLAGS="-L$(abspath $(BUILD))/rt-app/json-c" \
+			CFLAGS="-I$(abspath $(BUILD))/rt-app/"; \
     	AM_LDFLAGS="-all-static" make
 	touch $@
 
