@@ -58,7 +58,8 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>)
     set_cpuset_to_pid(std::process::id(), &CpuSet::any_subset(run.config.cpus)?)?;
 
     let mut proc = run_rt_app(config_file, stdout_file)?;
-    proc.wait()?;
+    proc.wait()
+        .map_err(|err| format!("Error in waiting for rt-app: {err}"))?;
 
     set_cpuset_to_pid(std::process::id(), &CpuSet::all()?)?;
     set_scheduler(std::process::id(), SchedPolicy::other())?;
@@ -88,13 +89,15 @@ fn compute_cpu_speed() -> Result<u64, Box<dyn std::error::Error>> {
     set_cpuset_to_pid(std::process::id(), &CpuSet::any_subset(1)?)?;
 
     let mut proc = run_rt_app(config_file, stdout_file)?;
-    proc.wait()?;
+    proc.wait()
+        .map_err(|err| format!("Error in waiting for rt-app: {err}"))?;
 
     set_cpuset_to_pid(std::process::id(), &CpuSet::all()?)?;
     set_scheduler(std::process::id(), SchedPolicy::other())?;
 
     // read calibration results
-    let out_data = std::fs::read_to_string(stdout_file)?;
+    let out_data = std::fs::read_to_string(&stdout_file)
+        .map_err(|err| format!("Couldn't read file: {}, reason: {}", &stdout_file, err))?;
     out_data.lines().find(|line| line.contains("pLoad ="))
         .ok_or(format!("Calibration error: load measuring not found").into())
         .and_then(|line| {

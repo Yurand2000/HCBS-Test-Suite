@@ -59,7 +59,8 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>)
     };
 
     let mut proc = run_periodic_thread(pthread_data)?;
-    proc.wait()?;
+    proc.wait()
+        .map_err(|err| format!("Error in waiting for periodic_thread: {err}"))?;
 
     set_cpuset_to_pid(std::process::id(), &CpuSet::all()?)?;
     set_scheduler(std::process::id(), SchedPolicy::other())?;
@@ -96,13 +97,15 @@ fn compute_cpu_speed() -> Result<u64, Box<dyn std::error::Error>> {
         extra_args: String::with_capacity(0),
         out_file: out_file.clone(),
     })?;
-    proc.wait()?;
+    proc.wait()
+        .map_err(|err| format!("Error in waiting for periodic_thread: {err}"))?;
 
     set_cpuset_to_pid(std::process::id(), &CpuSet::all()?)?;
     set_scheduler(std::process::id(), SchedPolicy::other())?;
 
     // read calibration results
-    let out_data = std::fs::read_to_string(out_file)?;
+    let out_data = std::fs::read_to_string(&out_file)
+        .map_err(|err| format!("Couldn't read file: {}, reason: {}", out_file, err))?;
     out_data.lines().find(|line| line.starts_with("#Cycles:"))
         .ok_or(format!("Calibration error: Cycles measuring not found").into())
         .and_then(|line| {
@@ -140,7 +143,7 @@ fn parse_taskset_results(out_file: &str) -> Result<Vec<TasksetRunResultInstance>
                     instance: fields[1],
                     abs_activation_time_us: fields[2],
                     rel_start_time_us: fields[3],
-                    rel_finishing_time_us: fields[4],
+                    rel_finishing_time_us: fields[3] + fields[4],
                     deadline_offset: offset,
                 })
             }
@@ -191,8 +194,8 @@ pub fn run_periodic_thread(args: PeriodicThreadData) -> Result<MyProcess, Box<dy
         num_tasks += 1;
     }
 
-    if args.cpu_speed.is_some() {
-        cmd_str += &format!(" -R {0}", args.cpu_speed.unwrap());
+    if let Some(cpu_speed) = args.cpu_speed {
+        cmd_str += &format!(" -R {0}", cpu_speed);
     }
 
     cmd_str += &format!(" {0} -N {1} -n {2}", args.extra_args, args.num_instances_per_job, num_tasks);

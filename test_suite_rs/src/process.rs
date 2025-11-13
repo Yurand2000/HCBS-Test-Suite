@@ -92,7 +92,7 @@ pub fn get_process_total_runtime_usage(pid: u32) -> Result<f64, String> {
     Ok((utime + stime) / ticks_per_second)
 }
 pub fn get_process_total_cpu_usage(pid: u32) -> Result<f64, String> {
-    let uptime: f64 = 
+    let uptime: f64 =
         std::fs::read_to_string("/proc/uptime")
                 .map_err(|err| format!("{err:?}"))?
             .split_whitespace().nth(0).ok_or("Error in reading /proc/uptime".to_owned())?

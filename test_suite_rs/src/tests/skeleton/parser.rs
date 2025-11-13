@@ -21,7 +21,8 @@ pub mod prelude {
 }
 
 pub fn read_all_file(file: &str) -> Result<String, Box<dyn std::error::Error>> {
-    std::fs::read_to_string(file).map_err(|err| err.into())
+    std::fs::read_to_string(file)
+        .map_err(|err| format!("Error on reading file {file}, reason {err}").into())
 }
 
 pub fn parse_taskset(data: &str) -> Result<NamedTaskset, Box<dyn std::error::Error>> {

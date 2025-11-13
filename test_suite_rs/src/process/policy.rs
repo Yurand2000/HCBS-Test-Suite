@@ -1,5 +1,7 @@
 use libc::{syscall, pid_t, sched_attr, SYS_sched_setattr, SYS_sched_getattr};
 
+use crate::utils::__println_debug;
+
 pub mod prelude {
     pub use super::{
         SchedPolicy,
@@ -157,21 +159,25 @@ pub fn get_scheduler(pid: u32) -> Result<SchedPolicy, SchedPolicyError> {
 }
 
 pub fn set_scheduler(pid: u32, policy: SchedPolicy) -> Result<(), SchedPolicyError> {
+    let res;
+
     unsafe {
         let attr: sched_attr = policy.into();
 
-        let res =
+        res =
             syscall(
                 SYS_sched_setattr,
                 pid                         as pid_t,
                 &attr                       as *const sched_attr,
                 0                           as libc::c_uint,
             );
+    };
 
-        if res != 0 {
-            Err(SchedPolicyError::SyscallError(std::io::Error::last_os_error()))
-        } else {
-            Ok(())
-        }
+    if res != 0 {
+        Err(SchedPolicyError::SyscallError(std::io::Error::last_os_error()))
+    } else {
+        __println_debug(|| format!("Set task {pid} sched policy to {policy:?}"));
+        Ok(())
     }
+
 }

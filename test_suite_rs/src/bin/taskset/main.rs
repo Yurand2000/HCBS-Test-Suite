@@ -3,7 +3,7 @@ use hcbs_test_suite::tests::prelude::*;
 #[derive(clap::Parser, Debug)]
 #[command(about, long_about = None)]
 pub struct Args {
-    #[arg(long="runner", default_value="rt-app")]
+    #[arg(long="runner", default_value="periodic-thread")]
     runner: Runner,
 
     #[command(subcommand)]

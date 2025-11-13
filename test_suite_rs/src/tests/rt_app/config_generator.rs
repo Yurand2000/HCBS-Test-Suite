@@ -34,7 +34,7 @@ r#"{
 }"#;
 
     std::fs::write(&out_file, calibration_config)
-        .map_err(|err| err.into())
+        .map_err(|err| format!("Error in writing file {out_file}, reason {err}").into())
 }
 
 pub fn generate_taskset_config(
@@ -112,5 +112,5 @@ format!(r#"{{
 }}"#, global_config, tasks_config);
 
     std::fs::write(out_file, config)
-        .map_err(|err| err.into())
+        .map_err(|err| format!("Error in writing file {out_file}, reason {err}").into())
 }
