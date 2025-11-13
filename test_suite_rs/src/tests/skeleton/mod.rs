@@ -80,7 +80,7 @@ pub fn run_taskset_array<FnSpeed, FnRun>(
 
 pub fn run_taskset_single<FnSpeed, FnRun>(
     args: &RunnerArgsSingle,
-    compute_cpu_speed: FnSpeed,
+    fn_compute_cpu_speed: FnSpeed,
     fn_run_taskset: FnRun,
 ) -> Result<Option<TasksetRunResult>, Box<dyn std::error::Error>>
     where
@@ -93,7 +93,7 @@ pub fn run_taskset_single<FnSpeed, FnRun>(
 
     println!("[taskset] Taskset Single Test ");
 
-    let cycles = compute_cpu_speed()?;
+    let cycles = fn_compute_cpu_speed()?;
     println!("  [debug] Calibration results: {} cycles", cycles);
 
     let run = get_taskset_run(&args.taskset, &args.config, &args.output)?;
