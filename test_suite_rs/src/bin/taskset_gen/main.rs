@@ -1,5 +1,7 @@
-use eva_engine::prelude::*;
-use eva_engine::analyses::multiprocessor_periodic_resource_model::MPRModel;
+use hcbs_test_suite::tests::prelude::{
+    serialize_taskset,
+    serialize_config,
+};
 
 mod args;
 mod generator;
@@ -26,7 +28,7 @@ fn main() {
             print!("Generating configs for taskset {}/{}\r", n + 1, tasksets_num);
             std::io::Write::flush(&mut std::io::stdout()).unwrap();
 
-            let configs = generator::generate_config(&taskset, &analysis_opts);
+            let configs = generator::generate_config("config", &taskset, &analysis_opts);
             (taskset, configs)
         })
         .for_each(|(taskset, configs)| {
@@ -36,31 +38,14 @@ fn main() {
 
             std::fs::write(
                 &format!("{}/taskset.txt", taskset_dir),
-                taskset_to_string(&taskset.tasks)
+                serialize_taskset(&taskset).unwrap()
             ).unwrap();
 
             for (i, config) in configs.iter().enumerate() {
                 std::fs::write(
                     format!("{}/config_{:03}.txt", taskset_dir, i),
-                    config_to_string(&config),
+                    serialize_config(&config).unwrap(),
                 ).unwrap();
             }
         });
-}
-
-fn taskset_to_string(taskset: &[RTTask]) -> String {
-    let mut output = String::new();
-    for task in taskset {
-        output += &format!("{:.0} {:.0} {:.0}\n", task.wcet.as_millis(), task.deadline.as_millis(), task.period.as_millis());
-    }
-
-    output
-}
-
-fn config_to_string(model: &MPRModel) -> String {
-    format!("{} {:.0} {:.0}",
-        model.concurrency,
-        (model.resource / model.concurrency as f64).as_millis().ceil(),
-        model.period.as_millis()
-    )
 }

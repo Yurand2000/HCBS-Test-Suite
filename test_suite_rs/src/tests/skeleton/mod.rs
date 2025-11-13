@@ -121,18 +121,18 @@ pub fn read_taskset_results(
             continue;
         }
 
-        let taskset_name = run.tasks.name.clone();
+        let taskset_name = run.taskset.name.clone();
         let config_name = run.config.name.clone();
 
         let result =
             if std::path::Path::new(&run.results_file).exists() {
                 TasksetRunResult {
-                    taskset: run.tasks,
+                    taskset: run.taskset,
                     config: run.config,
                     results: parse_result(&read_all_file(&run.results_file)?)?,
                 }
             } else {
-                println!("* Taskset {}, config {}: no output", run.tasks.name, run.config.name);
+                println!("* Taskset {}, config {}: no output", run.taskset.name, run.config.name);
                 continue;
             };
 
@@ -159,7 +159,7 @@ fn get_taskset_run(taskset: &str, config: &str, output_file: &str) -> Result<Tas
     let config = parse_config(&read_all_file(config)?)?;
 
     Ok(TasksetRun {
-        tasks: taskset,
+        taskset,
         config,
         results_file: output_file.to_owned(),
     })
@@ -210,7 +210,7 @@ fn get_taskset_runs(args: &RunnerArgsAll) -> Result<Vec<TasksetRun>, Box<dyn std
                             &args.output_dir, &taskset.name, &config.name);
 
                         TasksetRun {
-                            tasks: taskset.clone(),
+                            taskset: taskset.clone(),
                             config,
                             results_file: output_file,
                         }
@@ -222,7 +222,7 @@ fn get_taskset_runs(args: &RunnerArgsAll) -> Result<Vec<TasksetRun>, Box<dyn std
     }
 
     taskset_runs.sort_unstable_by(|l, r| {
-        match l.tasks.name.cmp(&r.tasks.name) {
+        match l.taskset.name.cmp(&r.taskset.name) {
             std::cmp::Ordering::Equal =>
                 l.config.name.cmp(&r.config.name),
             other =>
@@ -256,7 +256,7 @@ fn run_taskset_one<FnRun>(
     let already_run = std::path::Path::new(&run.results_file).exists();
 
     let insights = compute_insights(&run, &args);
-    let taskset_header = format!("{} on {}", run.tasks.name, run.config.name);
+    let taskset_header = format!("{} on {}", run.taskset.name, run.config.name);
     let taskset_header =
         if already_run {
             taskset_header + " (already run)"
@@ -273,13 +273,16 @@ fn run_taskset_one<FnRun>(
     let result =
         if already_run {
             TasksetRunResult {
-                taskset: run.tasks,
+                taskset: run.taskset,
                 config: run.config,
                 results: parse_result(&read_all_file(&run.results_file)?)?,
             }
         } else {
             let results_file = std::path::Path::new(&run.results_file).to_owned();
+
+            run_taskset_pre_asserts(&run, &args)?;
             let result = run_taskset(run, &args, cycles)?;
+            run_taskset_post_asserts(&result, &args)?;
 
             // create results file
             let dirs = results_file.parent()
@@ -303,4 +306,39 @@ fn run_taskset_one<FnRun>(
     }
 
     Ok(Some(result))
+}
+
+pub fn run_taskset_pre_asserts(run: &TasksetRun, args: &RunnerArgsBase) -> Result<(), Box<dyn std::error::Error>> {
+    if run.config.cpus > args.max_num_cpus {
+        println!("- Error on taskset {}, config {}", run.taskset.name, run.config.name);
+        println!("  Attempted to run taskset with {0} CPUs on a maximum of {1} CPUs",
+            run.config.cpus, args.max_num_cpus);
+        panic!("unexpected");
+    }
+
+    let taskset_bw = run.config.runtime / run.config.period;
+    if taskset_bw > args.max_allocable_bw {
+        println!("- Error on taskset {}, config {}", run.taskset.name, run.config.name);
+        println!("  Attempted to allocate more bandwidth ({}) than the maximum allocable ({})",
+            taskset_bw, args.max_allocable_bw);
+        panic!("unexpected");
+    }
+
+    Ok(())
+}
+
+pub fn run_taskset_post_asserts(result: &TasksetRunResult, args: &RunnerArgsBase) -> Result<(), Box<dyn std::error::Error>> {
+    for i in 0..result.taskset.tasks.len() {
+        let ith_job_instances =
+            result.results.iter()
+            .filter(|res| res.task == (i as u64))
+            .count() as u64;
+
+        if ith_job_instances < args.num_instances_per_job {
+            return Err(format!("Taskset {}, config {}, generated an incorrect output: task {}, jobs {}",
+                result.taskset.name, result.config.name, i, ith_job_instances).into());
+        }
+    }
+
+    Ok(())
 }

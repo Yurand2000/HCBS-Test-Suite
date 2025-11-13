@@ -3,8 +3,6 @@ use crate::prelude::*;
 pub mod prelude {
     pub use super::runner_args::prelude::*;
     pub use super::{
-        Taskset,
-        TasksetConfig,
         TasksetRun,
         TasksetRunInsights,
         TasksetRunResultInstance,
@@ -21,23 +19,9 @@ pub mod runner_args;
 use runner_args::*;
 
 #[derive(Debug, Clone)]
-pub struct Taskset {
-    pub name: String,
-    pub data: Vec<PeriodicTaskData>,
-}
-
-#[derive(Debug, Clone)]
-pub struct TasksetConfig {
-    pub name: String,
-    pub num_cpus: u64,
-    pub runtime_ms: u64,
-    pub period_ms: u64,
-}
-
-#[derive(Debug, Clone)]
 pub struct TasksetRun {
-    pub tasks: Taskset,
-    pub config: TasksetConfig,
+    pub taskset: NamedTaskset,
+    pub config: NamedConfig,
     pub results_file: String,
 }
 
@@ -58,8 +42,8 @@ pub struct TasksetRunResultInstance {
 
 #[derive(Debug, Clone)]
 pub struct TasksetRunResult {
-    pub taskset: Taskset,
-    pub config: TasksetConfig,
+    pub taskset: NamedTaskset,
+    pub config: NamedConfig,
     pub results: Vec<TasksetRunResultInstance>,
 }
 
@@ -74,8 +58,8 @@ pub struct TasksetRunResultInsights {
 
 pub fn compute_insights(run: &TasksetRun, args: &RunnerArgsBase) -> TasksetRunInsights {
     let expected_runtime_us =
-        run.tasks.data.iter()
-        .map(|task| task.period_ms * args.num_instances_per_job * 1000)
+        run.taskset.tasks.iter()
+        .map(|task| task.period.as_millis() as u64 * args.num_instances_per_job * 1000)
         .max().unwrap();
 
     TasksetRunInsights {
@@ -101,19 +85,19 @@ pub fn compute_result_insights(run: &TasksetRunResult) -> TasksetRunResultInsigh
 }
 
 pub fn can_run_taskset(run: &TasksetRun, args: &RunnerArgsBase) -> bool {
-    if run.config.num_cpus > args.max_num_cpus {
+    if run.config.cpus > args.max_num_cpus {
         return false;
     }
 
-    let taskset_bw = run.config.runtime_ms as f32 / run.config.period_ms as f32;
+    let taskset_bw = run.config.runtime / run.config.period;
     if taskset_bw > args.max_allocable_bw {
         return false;
     }
 
-    let min_task_period_ms = run.tasks.data.iter()
-        .map(|task| task.period_ms).min().unwrap();
+    let min_task_period = run.taskset.tasks.iter()
+        .map(|task| task.period).min().unwrap();
 
-    if min_task_period_ms < (run.config.period_ms - run.config.runtime_ms) {
+    if min_task_period < (run.config.period - run.config.runtime) {
         return false;
     }
 
@@ -124,7 +108,7 @@ pub fn check_root_cgroup(args: &RunnerArgsBase) -> Result<(), Box<dyn std::error
     mount_cgroup_fs()?;
     let cgroup_period = crate::cgroup::get_cgroup_period_us(".")?;
     let cgroup_runtime = crate::cgroup::get_cgroup_runtime_us(".")?;
-    let cgroup_bw = cgroup_runtime as f32 / cgroup_period as f32;
+    let cgroup_bw = cgroup_runtime as f64 / cgroup_period as f64;
     if cgroup_bw < args.max_allocable_bw {
         return Err(format!("Cannot run tasksets as the maximum allocable bandwidth is {cgroup_bw}, \
                             while you are requesting {} max bw", args.max_allocable_bw).into());

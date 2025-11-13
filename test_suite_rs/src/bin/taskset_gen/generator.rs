@@ -2,6 +2,7 @@
 use rand::Rng;
 use eva_engine::prelude::*;
 use eva_engine::analyses::multiprocessor_periodic_resource_model::MPRModel;
+use hcbs_test_suite::prelude::*;
 
 pub mod uunifast;
 
@@ -11,12 +12,6 @@ pub struct TasksetGeneratorOptions {
     pub num_tasks: (u64, u64),
     pub task_period_ms: (Time, Time, Time),
     pub taskset_utilization: (f64, f64, f64),
-}
-
-#[derive(Debug, Clone)]
-pub struct NamedTaskset {
-    pub name: String,
-    pub tasks: Vec<RTTask>,
 }
 
 pub fn generate_tasksets(
@@ -90,13 +85,15 @@ pub struct AnalysisOptions {
 }
 
 pub fn generate_config(
+    base_name: &str,
     taskset: &NamedTaskset,
     options: &AnalysisOptions,
-) -> Vec<MPRModel> {
+) -> Vec<NamedConfig> {
     let (period_min, period_max, period_step) = options.cgroup_period;
 
     time_iter(period_min, period_max, period_step)
-        .flat_map(|period| {
+        .enumerate()
+        .flat_map(|(i, period)| {
             generate_interface_with_max_bw(
                 &taskset.tasks,
                 period,
@@ -104,6 +101,12 @@ pub fn generate_config(
                 options.max_cores,
                 options.max_per_core_bandwidth,
             ).ok()
+                .map(|model| NamedConfig {
+                    name: format!("{}-{:03}", base_name, i),
+                    cpus: model.concurrency,
+                    runtime: (model.resource / model.concurrency as f64).ceil(),
+                    period: model.period,
+                })
         })
         .collect()
 }

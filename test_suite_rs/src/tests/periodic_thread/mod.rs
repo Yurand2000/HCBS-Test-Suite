@@ -1,11 +1,11 @@
 use crate::prelude::*;
 use crate::tests::prelude::*;
+use eva_engine::prelude::*;
 
 pub mod prelude {
     pub use super::{
         main_run_taskset_array,
         main_run_taskset_single,
-        main_read_results_array,
     };
 }
 
@@ -27,31 +27,9 @@ pub fn main_run_taskset_single(args: RunnerArgsSingle) -> Result<Option<TasksetR
     )
 }
 
-#[inline(always)]
-pub fn main_read_results_array(args: RunnerArgsAll) -> Result<Vec<TasksetRunResult>, Box<dyn std::error::Error>> {
-    read_taskset_results(
-        &args,
-    )
-}
-
 fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>)
     -> Result<TasksetRunResult, Box<dyn std::error::Error>>
 {
-    if run.config.num_cpus > args.max_num_cpus {
-        println!("- Error on taskset {}, config {}", run.tasks.name, run.config.name);
-        println!("  Attempted to run taskset with {0} CPUs on a maximum of {1} CPUs",
-            run.config.num_cpus, args.max_num_cpus);
-        panic!("unexpected");
-    }
-
-    let taskset_bw = run.config.runtime_ms as f32 / run.config.period_ms as f32;
-    if taskset_bw > args.max_allocable_bw {
-        println!("- Error on taskset {}, config {}", run.tasks.name, run.config.name);
-        println!("  Attempted to allocate more bandwidth ({}) than the maximum allocable ({})",
-            taskset_bw, args.max_allocable_bw);
-        panic!("unexpected");
-    }
-
     let tmp_output_file = "/tmp/out.txt";
     if std::fs::exists(tmp_output_file)
         .map_err(|err| format!("Error in checking existance of {tmp_output_file}: {err}"))?
@@ -62,19 +40,19 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>)
 
     let cgroup = MyCgroup::new(
         &args.cgroup,
-        run.config.runtime_ms * 1000,
-        run.config.period_ms * 1000,
+        run.config.runtime.as_micros() as u64,
+        run.config.period.as_micros() as u64,
         true
     )?;
 
     migrate_task_to_cgroup(&args.cgroup, std::process::id())?;
     set_scheduler(std::process::id(), SchedPolicy::RR(99))?;
-    set_cpuset_to_pid(std::process::id(), &CpuSet::any_subset(run.config.num_cpus)?)?;
+    set_cpuset_to_pid(std::process::id(), &CpuSet::any_subset(run.config.cpus)?)?;
 
     let pthread_data = PeriodicThreadData {
         start_priority: 98,
         cpu_speed: cycles,
-        tasks: run.tasks.data.clone(),
+        tasks: run.taskset.tasks.clone(),
         extra_args: String::new(),
         out_file: tmp_output_file.to_owned(),
         num_instances_per_job: args.num_instances_per_job,
@@ -90,22 +68,10 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>)
     cgroup.destroy()?;
 
     let result = TasksetRunResult {
-        taskset: run.tasks,
+        taskset: run.taskset,
         config: run.config,
         results: parse_taskset_results(tmp_output_file)?,
     };
-
-    //assert result is compatible with program input
-    for i in 0..result.taskset.data.len() {
-        let ith_job_instances =
-            result.results.iter()
-            .filter(|res| res.task == (i as u64))
-            .count() as u64;
-
-        if ith_job_instances != args.num_instances_per_job {
-            return Err(format!("Taskset {}, config {}, generated an incorrect output.", result.taskset.name, result.config.name).into());
-        }
-    }
 
     Ok(result)
 }
@@ -121,7 +87,11 @@ fn compute_cpu_speed() -> Result<u64, Box<dyn std::error::Error>> {
     let mut proc = run_periodic_thread(PeriodicThreadData {
         start_priority: 99,
         cpu_speed: None,
-        tasks: vec![ PeriodicTaskData { runtime_ms: 10, period_ms: 100 }],
+        tasks: vec![ RTTask {
+            wcet: Time::millis(10.0),
+            deadline: Time::millis(100.0),
+             period: Time::millis(100.0),
+        } ],
         num_instances_per_job: 1,
         extra_args: String::with_capacity(0),
         out_file: out_file.clone(),
@@ -189,4 +159,55 @@ fn parse_taskset_results(out_file: &str) -> Result<Vec<TasksetRunResultInstance>
         .map_err(|err| format!("Taskset result parser error: {err}"))?;
 
     Ok(data)
+}
+
+#[derive(Debug)]
+#[derive(Clone)]
+pub struct PeriodicThreadData {
+    pub start_priority: u64,
+    pub cpu_speed: Option<u64>,
+    pub tasks: Vec<RTTask>,
+    pub num_instances_per_job: u64,
+    pub extra_args: String,
+    pub out_file: String,
+}
+
+pub fn run_periodic_thread(args: PeriodicThreadData) -> Result<MyProcess, Box<dyn std::error::Error>> {
+    use std::process::*;
+
+    let cmd = local_executable_cmd("/bin", "periodic_thread")?;
+
+    if args.tasks.len() == 0 {
+        Err(format!("Attempted executing periodic_thread with no tasks"))?;
+    }
+
+    // assert tasks are ordered by period (ascending)
+    AnalysisUtils::assert_ordered_by_period(&args.tasks)?;
+
+    let mut num_tasks = 0;
+    let mut cmd_str = String::new();
+    for (prio, task) in (1..=args.start_priority).rev().zip(args.tasks.iter()) {
+        cmd_str += &format!(" -C {0:.0} -p {1:.0} -P {2}", task.wcet.as_micros(), task.period.as_micros(), prio);
+        num_tasks += 1;
+    }
+
+    if args.cpu_speed.is_some() {
+        cmd_str += &format!(" -R {0}", args.cpu_speed.unwrap());
+    }
+
+    cmd_str += &format!(" {0} -N {1} -n {2}", args.extra_args, args.num_instances_per_job, num_tasks);
+    let cmd_str: Vec<_> = cmd_str.trim_ascii().split_ascii_whitespace().collect();
+
+    let out_file = std::fs::OpenOptions::new().write(true).create(true).open(&args.out_file)
+        .map_err(|err| format!("OutFile creation error {}: {err}", &args.out_file))?;
+
+    let proc = Command::new(cmd)
+        .args(cmd_str)
+        .stdin(Stdio::null())
+        .stdout(out_file)
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|err| format!("Error in starting periodic thread: {err}"))?;
+
+    Ok(MyProcess { process: proc })
 }
