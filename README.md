@@ -9,7 +9,8 @@ Rust-based tests for [Hierarchical Constant Bandwidth Server](https://github.com
 - **Make**
 - **Git**
 - **GCC**
-- **Rust**: ≥1.89.0-nightly
+- **Cmake**
+- **Rust**: ≥1.88.0
 
 ### Installation
 
