@@ -1,5 +1,6 @@
 use crate::prelude::*;
 use crate::tests::prelude::*;
+use eva_engine::prelude::*;
 
 pub mod prelude {
     pub use super::{
@@ -53,10 +54,9 @@ fn parse_task_result(run_file: &str) -> Result<Vec<TasksetRunResultInstance>, Bo
             TasksetRunResultInstance {
                 task: idx,
                 instance: 0,
-                abs_activation_time_us: start,
-                rel_start_time_us: (c_period as i64 - slack - run as i64) as u64,
-                rel_finishing_time_us: (c_period as i64 - slack) as u64,
-                deadline_offset: (- (slack as f64) - (run as f64)) / c_period as f64,
+                abs_activation_time: Time::micros(start as f64),
+                rel_start_time: Time::micros((c_period as i64 - slack - run as i64) as f64),
+                rel_finishing_time: Time::micros((c_period as i64 - slack) as f64),
             }
         }
     );

@@ -1,4 +1,5 @@
 use crate::prelude::*;
+use eva_engine::prelude::*;
 
 pub mod prelude {
     pub use super::runner_args::prelude::*;
@@ -27,17 +28,16 @@ pub struct TasksetRun {
 
 #[derive(Debug, Clone)]
 pub struct TasksetRunInsights {
-    pub expected_runtime_us: u64
+    pub expected_runtime: Time
 }
 
 #[derive(Debug, Clone)]
 pub struct TasksetRunResultInstance {
     pub task: u64,
     pub instance: u64,
-    pub abs_activation_time_us: u64,
-    pub rel_start_time_us: u64,
-    pub rel_finishing_time_us: u64,
-    pub deadline_offset: f64,
+    pub abs_activation_time: Time,
+    pub rel_start_time: Time,
+    pub rel_finishing_time: Time,
 }
 
 #[derive(Debug, Clone)]
@@ -51,28 +51,38 @@ pub struct TasksetRunResult {
 pub struct TasksetRunResultInsights {
     pub num_overruns: u64,
     pub overruns_ratio: f64,
-    pub worst_overrun: f64,
+    pub worst_overrun: Time,
 }
 
 /* -------------------------------------------------------------------------- */
 
+impl TasksetRunResultInstance {
+    pub fn slack_time(&self, task: &RTTask) -> Time {
+        task.deadline - self.rel_finishing_time
+    }
+}
+
 pub fn compute_insights(run: &TasksetRun, args: &RunnerArgsBase) -> TasksetRunInsights {
-    let expected_runtime_us =
+    let expected_runtime =
         run.taskset.tasks.iter()
-        .map(|task| task.period.as_millis() as u64 * args.num_instances_per_job * 1000)
-        .max().unwrap();
+        .map(|task| task.period)
+        .max().unwrap() * args.num_instances_per_job as f64;
 
     TasksetRunInsights {
-        expected_runtime_us,
+        expected_runtime,
     }
 }
 
 pub fn compute_result_insights(run: &TasksetRunResult) -> TasksetRunResultInsights {
     let (num_overruns, worst_overrun) =
         run.results.iter()
-        .fold((0u64, f64::NEG_INFINITY), |(mut num_overruns, worst_overrun), job_instance| {
-            if job_instance.deadline_offset > 0f64 { num_overruns+= 1; }
-            (num_overruns, worst_overrun.max(job_instance.deadline_offset))
+        .fold((0u64, Time::zero()), |(mut num_overruns, worst_overrun), job_instance| {
+            let task = &run.taskset.tasks[job_instance.task as usize];
+            let slack = job_instance.slack_time(task);
+
+            if slack < Time::zero() { num_overruns += 1; }
+
+            (num_overruns, worst_overrun.min(slack))
         });
 
     let overruns_ratio = num_overruns as f64 / run.results.len() as f64;

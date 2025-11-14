@@ -67,8 +67,8 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(f64, f64), Bo
     let dl_runtime_ms = args.period_ms * 4 / 10;
 
     migrate_task_to_cgroup(".", std::process::id())?;
-    let dl_processes: Vec<_> = (0..cpus).map(|_| run_yes()).try_collect()?;
-    let cgroup_processes: Vec<_> = (0..cpus).map(|_| run_yes()).try_collect()?;
+    let dl_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
+    let cgroup_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
 
     set_scheduler(std::process::id(), SchedPolicy::RR(99))?;
     cgroup_processes.iter().enumerate()

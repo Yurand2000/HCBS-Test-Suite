@@ -1,5 +1,3 @@
-#![feature(iterator_try_collect)]
-
 use std::ops::{Deref, DerefMut};
 use eva_engine::prelude::*;
 

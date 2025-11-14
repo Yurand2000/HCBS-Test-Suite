@@ -1,5 +1,3 @@
-#![feature(iterator_try_collect)]
-
 mod fair_server;
 mod sched_deadline;
 mod sched_fifo;

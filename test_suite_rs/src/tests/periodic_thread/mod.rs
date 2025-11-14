@@ -127,7 +127,7 @@ fn parse_taskset_results(out_file: &str) -> Result<Vec<TasksetRunResultInstance>
     let data = std::fs::read_to_string(out_file)
         .map_err(|err| format!("Failed to read output file {}: {}", out_file, err))?;
 
-    let u64_parser = map_res(digit1::<&str, ()>, |num: &str| num.parse::<u64>());
+    let u64_parser = || map_res(digit1::<&str, ()>, |num: &str| num.parse::<u64>());
     let f64_parser = map_res(recognize((
             opt(char('-')),
             digit1,
@@ -136,32 +136,32 @@ fn parse_taskset_results(out_file: &str) -> Result<Vec<TasksetRunResultInstance>
         )), |num: &str| num.parse::<f64>());
     let mut line_parser =
         map_res(
-            (count(terminated(u64_parser, space1), 5), f64_parser),
-            |(fields, offset)| {
+            (count(terminated(u64_parser(), space1), 5), f64_parser),
+            |(fields, _dl_offset)| {
                 Ok::<_, ()>(TasksetRunResultInstance {
                     task: fields[0],
                     instance: fields[1],
-                    abs_activation_time_us: fields[2],
-                    rel_start_time_us: fields[3],
-                    rel_finishing_time_us: fields[3] + fields[4],
-                    deadline_offset: offset,
+                    abs_activation_time: Time::micros(fields[2] as f64),
+                    rel_start_time: Time::micros(fields[3] as f64),
+                    rel_finishing_time: Time::micros(fields[3]  as f64 + fields[4]  as f64),
                 })
             }
         );
 
-    let data: Vec<_> = data.trim_ascii().lines()
+    data.trim_ascii().lines()
         .filter_map(|line| {
             let line = line.trim_ascii();
             if line.starts_with("#") {
                 None
             } else {
-                Some(line_parser.parse(&line).map(|(_, res)| res))
+                Some(
+                    line_parser.parse(&line)
+                        .map(|(_, res)| res)
+                )
             }
         })
-        .try_collect()
-        .map_err(|err| format!("Taskset result parser error: {err}"))?;
-
-    Ok(data)
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|err| format!("Taskset result parser error: {err}").into())
 }
 
 #[derive(Debug)]

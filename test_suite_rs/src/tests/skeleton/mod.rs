@@ -4,6 +4,7 @@ use crate::tests::generic::{
     __os_str_to_str,
     __path_to_str,
 };
+use eva_engine::prelude::*;
 
 pub mod prelude {
     pub use super::parser::prelude::*;
@@ -34,9 +35,9 @@ pub fn run_taskset_array<FnSpeed, FnRun>(
     let taskset_runs: Vec<TasksetRun> = get_taskset_runs(&args)?;
 
     // compute taskset insights
-    let total_expected_runtime_us: u64 = taskset_runs.iter()
+    let total_expected_runtime: Time = taskset_runs.iter()
         .filter(|run| can_run_filter(run, &args.args))
-        .map(|run| compute_insights(run, &args.args).expected_runtime_us)
+        .map(|run| compute_insights(run, &args.args).expected_runtime)
         .sum();
 
     let total_runs = taskset_runs.len();
@@ -46,7 +47,7 @@ pub fn run_taskset_array<FnSpeed, FnRun>(
 
     println!("[taskset] Taskset Tests ");
     println!("          Running {}/{} tasksets", todo_runs, total_runs);
-    println!("          Expected runtime: {:.2} secs", total_expected_runtime_us as f64 / 1000_000f64);
+    println!("          Expected runtime: {:.2} secs", total_expected_runtime.as_secs());
     if total_runs - todo_runs > 0 {
         println!("          Delete the folder '{}' to rerun all tests", args.output_dir);
     }
@@ -177,7 +178,7 @@ fn get_taskset_runs(args: &RunnerArgsAll) -> Result<Vec<TasksetRun>, Box<dyn std
             continue;
         }
 
-        let files: Vec<String> = std::fs::read_dir(&taskset_dir)
+        let files = std::fs::read_dir(&taskset_dir)
             .map_err(|err| format!("Taskset data directory {:?} error: {}", &taskset_dir, err))?
             .map(|entry| entry.map(|entry| entry.path()))
             .filter(|entry| entry.as_ref().is_ok_and(|entry| entry.is_file()))
@@ -190,7 +191,7 @@ fn get_taskset_runs(args: &RunnerArgsAll) -> Result<Vec<TasksetRun>, Box<dyn std
                     .and_then(|file| __os_str_to_str(file))
                 )
             )
-            .try_collect()?;
+            .collect::<Result<Vec<_>, _>>()?;
 
         let taskset_dir = __path_to_str(taskset_dir.as_path())?;
         if files.iter().find(|file| *file == "taskset.txt").is_none() {
@@ -202,7 +203,7 @@ fn get_taskset_runs(args: &RunnerArgsAll) -> Result<Vec<TasksetRun>, Box<dyn std
         }
 
         let taskset = parse_taskset(&read_all_file(&format!("{taskset_dir}/taskset.txt"))?)?;
-        let mut runs: Vec<_> = files.iter().filter(|f| *f != "taskset.txt")
+        let mut runs = files.iter().filter(|f| *f != "taskset.txt")
             .map(|config| {
                 parse_config(&read_all_file(&format!("{taskset_dir}/{config}"))?)
                     .map(|config| {
@@ -216,7 +217,7 @@ fn get_taskset_runs(args: &RunnerArgsAll) -> Result<Vec<TasksetRun>, Box<dyn std
                         }
                     })
             })
-            .try_collect()?;
+            .collect::<Result<Vec<_>, _>>()?;
 
         taskset_runs.append(&mut runs);
     }
@@ -261,7 +262,7 @@ fn run_taskset_one<FnRun>(
         if already_run {
             taskset_header + " (already run)"
         } else {
-            taskset_header + &format!(" (~{:.2} secs)", insights.expected_runtime_us as f64 / 1000_000f64)
+            taskset_header + &format!(" (~{:.2} secs)", insights.expected_runtime.as_secs())
         };
     batch_test_header(&taskset_header, "taskset");
 
@@ -328,15 +329,33 @@ pub fn run_taskset_pre_asserts(run: &TasksetRun, args: &RunnerArgsBase) -> Resul
 }
 
 pub fn run_taskset_post_asserts(result: &TasksetRunResult, args: &RunnerArgsBase) -> Result<(), Box<dyn std::error::Error>> {
-    for i in 0..result.taskset.tasks.len() {
+    for job_result in result.results.iter() {
+        let task = &result.taskset.tasks[job_result.task as usize];
+        let runtime = job_result.rel_finishing_time - job_result.rel_start_time;
+
+        if job_result.rel_start_time > job_result.rel_finishing_time {
+            return Err(format!("Taskset {}, config {}, generated an incorrect output: task {}, job {} \
+                               finished its execution before starting.",
+                               result.taskset.name, result.config.name, job_result.task, job_result.instance).into());
+        }
+
+        if runtime < task.wcet {
+            return Err(format!("Taskset {}, config {}, generated an incorrect output: task {}, job {} \
+                               executed for less runtime ({}) than specified ({})",
+                               result.taskset.name, result.config.name, job_result.task, job_result.instance,
+                               runtime, task.wcet).into());
+        }
+    }
+
+    for (i, _) in result.taskset.tasks.iter().enumerate() {
         let ith_job_instances =
             result.results.iter()
             .filter(|res| res.task == (i as u64))
-            .count() as u64;
+            .count();
 
-        if ith_job_instances < args.num_instances_per_job {
+        if ith_job_instances < args.num_instances_per_job as usize {
             return Err(format!("Taskset {}, config {}, generated an incorrect output: task {}, jobs {}",
-                result.taskset.name, result.config.name, i, ith_job_instances).into());
+                               result.taskset.name, result.config.name, i, ith_job_instances).into());
         }
     }
 

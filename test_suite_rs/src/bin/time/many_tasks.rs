@@ -52,9 +52,9 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Bo
     batch_test_header(&test_header, "time");
 
     let result = main(args, ctrlc_flag)
-        .and_then(|used_bw| { 
+        .and_then(|used_bw| {
             match used_bw {
-                Skippable::Result(used_bw) => 
+                Skippable::Result(used_bw) =>
                     if f64::abs(used_bw - max_expected_bw) < max_error {
                         Ok(Skippable::Result(format!("Processes used an average of {used_bw:.5} units of CPU bandwidth.")))
                     } else {
@@ -91,8 +91,8 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<Skippable<f64,
 
     migrate_task_to_cgroup(&args.cgroup, std::process::id())?;
 
-    let procs: Vec<_> = (0..args.num_tasks)
-        .map(|_| run_yes()).try_collect()?;
+    let procs = (0..args.num_tasks)
+        .map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
 
     set_scheduler(std::process::id(), SchedPolicy::RR(99))?;
     procs.iter()

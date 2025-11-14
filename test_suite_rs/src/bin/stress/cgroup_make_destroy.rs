@@ -48,8 +48,8 @@ pub fn main(args: MyArgs, rng: Option<&mut dyn rand::RngCore>, ctrlc_flag: Optio
             set_scheduler(std::process::id(), SchedPolicy::RR(99))?;
 
             let num_procs = rng.random_range(1..=5);
-            let procs: Vec<_> = (0..num_procs)
-                .map(|_| run_yes()).try_collect()?;
+            let procs = (0..num_procs)
+                .map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
 
             thread::sleep(std::time::Duration::from_secs_f32(rng.random_range(0.5f32..=2f32)));
 

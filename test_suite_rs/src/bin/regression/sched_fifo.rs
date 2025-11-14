@@ -64,8 +64,8 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(f64, f64), Bo
     let cgroup = MyCgroup::new(&args.cgroup, args.runtime_ms * 1000, args.period_ms * 1000, false)?;
 
     migrate_task_to_cgroup(".", std::process::id())?;
-    let fifo_processes: Vec<_> = (0..cpus).map(|_| run_yes()).try_collect()?;
-    let cgroup_processes: Vec<_> = (0..cpus).map(|_| run_yes()).try_collect()?;
+    let fifo_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
+    let cgroup_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
 
     set_scheduler(std::process::id(), SchedPolicy::FIFO(99))?;
     cgroup_processes.iter().enumerate()

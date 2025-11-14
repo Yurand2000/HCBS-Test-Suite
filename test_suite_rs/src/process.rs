@@ -48,8 +48,9 @@ pub fn get_cgroup_pids(name: &str) -> Result<Vec<u32>, Box<dyn std::error::Error
     }
 
     let path = __cgroup_path(name);
-    Ok(std::fs::read_to_string(format!("{path}/cgroup.procs"))?.lines()
-        .map(|line| line.parse::<u32>()).try_collect::<Vec<u32>>()?)
+    std::fs::read_to_string(format!("{path}/cgroup.procs"))?.lines()
+        .map(|line| line.parse::<u32>().map_err(|err| err.into()))
+        .collect()
 }
 
 pub fn migrate_task_to_cgroup(name: &str, pid: u32) -> Result<(), Box<dyn std::error::Error>> {

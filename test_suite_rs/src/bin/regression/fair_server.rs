@@ -44,8 +44,8 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<f64, Box<dyn s
     let cpus = num_cpus::get();
 
     migrate_task_to_cgroup(".", std::process::id())?;
-    let fifo_processes: Vec<_> = (0..cpus).map(|_| cpu_hog()).try_collect()?;
-    let non_fifo_processes: Vec<_> = (0..cpus).map(|_| cpu_hog()).try_collect()?;
+    let fifo_processes = (0..cpus).map(|_| cpu_hog()).collect::<Result<Vec<_>, _>>()?;
+    let non_fifo_processes = (0..cpus).map(|_| cpu_hog()).collect::<Result<Vec<_>, _>>()?;
 
     set_scheduler(std::process::id(), SchedPolicy::RR(99))?;
     non_fifo_processes.iter()
@@ -65,12 +65,12 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<f64, Box<dyn s
 
     wait_loop(args.max_time, ctrlc_flag)?;
 
-    let fifo_total_usage = 
+    let fifo_total_usage =
         fifo_processes.iter()
         .map(|proc| get_process_total_runtime_usage(proc.id()))
         .sum::<Result<f64, _>>()?;
 
-    let non_fifo_total_usage = 
+    let non_fifo_total_usage =
         non_fifo_processes.iter()
         .map(|proc| get_process_total_runtime_usage(proc.id()))
         .sum::<Result<f64, _>>()?;
