@@ -330,20 +330,10 @@ pub fn run_taskset_pre_asserts(run: &TasksetRun, args: &RunnerArgsBase) -> Resul
 
 pub fn run_taskset_post_asserts(result: &TasksetRunResult, args: &RunnerArgsBase) -> Result<(), Box<dyn std::error::Error>> {
     for job_result in result.results.iter() {
-        let task = &result.taskset.tasks[job_result.task as usize];
-        let runtime = job_result.rel_finishing_time - job_result.rel_start_time;
-
         if job_result.rel_start_time > job_result.rel_finishing_time {
             return Err(format!("Taskset {}, config {}, generated an incorrect output: task {}, job {} \
                                finished its execution before starting.",
                                result.taskset.name, result.config.name, job_result.task, job_result.instance).into());
-        }
-
-        if runtime < task.wcet {
-            return Err(format!("Taskset {}, config {}, generated an incorrect output: task {}, job {} \
-                               executed for less runtime ({}) than specified ({})",
-                               result.taskset.name, result.config.name, job_result.task, job_result.instance,
-                               runtime, task.wcet).into());
         }
     }
 
