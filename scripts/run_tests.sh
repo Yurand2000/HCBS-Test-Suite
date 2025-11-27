@@ -10,10 +10,11 @@ print_help() {
     echo "-                   time : run time tests (~100s runtime)"
     echo "-             regression : run regression tests (~17m runtime)"
     echo ""
-    echo "-                   full : run all test suites + excluded ones"
+    echo "-                   full : run all test suites + random-stress + tasksets-rt-app"
     echo "- ---------------------- : excluded tests from the all command -------------"
     echo "-          random-stress : run randomly generated stress tests (~1h runtime)"
-    echo "-               tasksets : run taskset tests"
+    echo "-               tasksets : run taskset tests - periodic-thread backend"
+    echo "-        tasksets-rt-app : run taskset tests - rt-app backend"
 }
 
 setup() {
@@ -79,8 +80,13 @@ random_stress() {
 }
 
 tasksets() {
-    echo "* Taskset Tests *"
-    TESTBINDIR=bin ./test_suite_v2/taskset all -n $(nproc) -i ./tasksets -o ./tasksets_out || true
+    echo "* Taskset Tests - periodic-thread *"
+    TESTBINDIR=bin ./test_suite_v2/taskset --runner periodic-thread all -n $(nproc) -i ./tasksets -o ./tasksets_out || true
+}
+
+tasksets_rt_app() {
+    echo "* Taskset Tests - rt-app *"
+    TESTBINDIR=bin ./test_suite_v2/taskset --runner rt-app all -n $(nproc) -i ./tasksets -o ./tasksets_out || true
 }
 
 export BATCH_TEST=1
@@ -101,7 +107,7 @@ elif [ $TEST_SUITE = "full" ]; then
     time_tests
     regression
     random_stress
-    tasksets
+    tasksets_rt_app
 elif [ $TEST_SUITE = "help" ] || [ $TEST_SUITE = "-h" ] || [ $TEST_SUITE = "--help" ]; then
     print_help
 elif [ $TEST_SUITE = "constraints" ]; then
@@ -119,6 +125,9 @@ elif [ $TEST_SUITE = "random-stress" ]; then
 elif [ $TEST_SUITE = "tasksets" ]; then
     setup
     tasksets
+elif [ $TEST_SUITE = "tasksets-rt-app" ]; then
+    setup
+    tasksets_rt_app
 else
     echo "Unknown test suite: $TEST_SUITE"
     print_help
