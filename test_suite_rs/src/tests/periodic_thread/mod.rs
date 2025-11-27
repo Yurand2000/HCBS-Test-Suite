@@ -138,12 +138,18 @@ fn parse_taskset_results(out_file: &str) -> Result<Vec<TasksetRunResultInstance>
         map_res(
             (count(terminated(u64_parser(), space1), 5), f64_parser),
             |(fields, _dl_offset)| {
+                let task_num = fields[0];
+                let instance_num = fields[1];
+                let abs_finish_us = fields[2] as f64;
+                let rel_finish_us = fields[3] as f64;
+                let runtime_us = fields[4] as f64;
+
                 Ok::<_, ()>(TasksetRunResultInstance {
-                    task: fields[0],
-                    instance: fields[1],
-                    abs_activation_time: Time::micros(fields[2] as f64),
-                    rel_start_time: Time::micros(fields[3] as f64),
-                    rel_finishing_time: Time::micros(fields[3]  as f64 + fields[4]  as f64),
+                    task: task_num,
+                    instance: instance_num,
+                    abs_activation_time: Time::micros(abs_finish_us - rel_finish_us),
+                    rel_start_time: Time::micros(rel_finish_us - runtime_us),
+                    rel_finishing_time: Time::micros(rel_finish_us),
                 })
             }
         );

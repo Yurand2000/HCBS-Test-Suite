@@ -92,19 +92,19 @@ pub fn parse_result(data: &str) -> Result<Vec<TasksetRunResultInstance>, Box<dyn
     let base_parser = (
         tag("Results"), space0, newline, space0,
         tag("Task"), space1, tag("Job"), space1, tag("AbsActivation_us"),
-            space1, tag("RelStart_us"), space1, tag("RelFinish_us"), space0);
+            space1, tag("RelStart_us"), space1, tag("RelFinish_us"), space1, tag("Slack_us"), space0);
 
     let u64_parser = || map_res(digit1::<&str, ()>, |num: &str| num.parse::<u64>());
 
     let line_parser = || map(
-        (space0, u64_parser(), space1, u64_parser(), space1, u64_parser(), space1, u64_parser(), space1, u64_parser(), space0),
-        |(_, task, _, instance, _, abs_activation_time_ns, _, rel_start_time_ns, _, rel_finishing_time_ns, _)|
+        (space0, u64_parser(), space1, u64_parser(), space1, u64_parser(), space1, u64_parser(), space1, u64_parser(), space1, u64_parser(), space0),
+        |(_, task, _, instance, _, abs_activation_time_us, _, rel_start_time_us, _, rel_finishing_time_us, _, _slack_us, _)|
             TasksetRunResultInstance {
                 task,
                 instance,
-                abs_activation_time: Time::nanos(abs_activation_time_ns as f64),
-                rel_start_time: Time::nanos(rel_start_time_ns as f64),
-                rel_finishing_time: Time::nanos(rel_finishing_time_ns as f64),
+                abs_activation_time: Time::micros(abs_activation_time_us as f64),
+                rel_start_time: Time::micros(rel_start_time_us as f64),
+                rel_finishing_time: Time::micros(rel_finishing_time_us as f64),
             }
     );
 
@@ -118,17 +118,21 @@ pub fn parse_result(data: &str) -> Result<Vec<TasksetRunResultInstance>, Box<dyn
         .map_err(|err| format!("Taskset run result parser error: {err}").into())
 }
 
-pub fn serialize_result(results: &Vec<TasksetRunResultInstance>) -> Result<String, Box<dyn std::error::Error>> {
-    let mut out_string = format!("Results\nTask Job AbsActivation_us RelStart_us RelFinish_us\n");
+pub fn serialize_result(taskset: &NamedTaskset, results: &Vec<TasksetRunResultInstance>) -> Result<String, Box<dyn std::error::Error>> {
+    let mut out_string = format!("Results\nTask Job AbsActivation_us RelStart_us RelFinish_us Slack_us\n");
 
     results.iter()
         .for_each(|data| {
-            out_string += &format!("{} {} {:.0} {:.0} {:.0}\n",
+            let task = &taskset.tasks[data.task as usize];
+            let slack = data.slack_time(task);
+
+            out_string += &format!("{} {} {:.0} {:.0} {:.0} {:.0}\n",
                 data.task,
                 data.instance,
-                data.abs_activation_time.as_nanos(),
-                data.rel_start_time.as_nanos(),
-                data.rel_finishing_time.as_nanos(),
+                data.abs_activation_time.as_micros(),
+                data.rel_start_time.as_micros(),
+                data.rel_finishing_time.as_micros(),
+                slack.as_micros(),
             );
         });
 

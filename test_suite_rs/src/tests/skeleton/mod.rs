@@ -292,7 +292,7 @@ fn run_taskset_one<FnRun>(
             std::fs::create_dir_all(dirs)
                 .map_err(|err| format!("Error in creating directory(ies) {dirs:?}: {err}"))?;
 
-            std::fs::write(results_file, serialize_result(&result.results)?)?;
+            std::fs::write(results_file, serialize_result(&result.taskset, &result.results)?)?;
 
             result
         };
