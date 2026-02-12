@@ -30,6 +30,7 @@ pub fn __println_debug<'a, F: FnOnce() -> String>(fun: F) {
         Ok(v) if v != "" => {
             let str = fun();
             println!("{str}");
+            std::io::stdout().flush().unwrap();
         },
         _ => (),
     };

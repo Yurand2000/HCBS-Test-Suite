@@ -1,6 +1,6 @@
 use crate::prelude::*;
 use crate::tests::prelude::*;
-use eva_engine::prelude::*;
+use eva_rt_engine::prelude::*;
 
 pub mod prelude {
     pub use super::{
@@ -191,7 +191,9 @@ pub fn run_periodic_thread(args: PeriodicThreadData) -> Result<MyProcess, Box<dy
     }
 
     // assert tasks are ordered by period (ascending)
-    AnalysisUtils::assert_ordered_by_period(&args.tasks)?;
+    if !RTUtils::is_taskset_sorted_by_period(&args.tasks) {
+        Err(format!("Taskset for periodic_thread must be sorted by period."))?;
+    }
 
     let mut num_tasks = 0;
     let mut cmd_str = String::new();

@@ -1,7 +1,6 @@
-
 use rand::Rng;
-use eva_engine::prelude::*;
-use eva_engine::analyses::multiprocessor_periodic_resource_model::MPRModel;
+use eva_rt_engine::prelude::*;
+use eva_rt_engine::algorithms::full_preemption::global_multiprocessor::hierarchical::mpr_model09::*;
 use hcbs_test_suite::prelude::*;
 
 pub mod uunifast;
@@ -125,7 +124,33 @@ fn time_iter(min: Time, max: Time, step: Time) -> impl Iterator<Item = Time>
         .take_while(move |&v| v <= max)
 }
 
-// Custom Generator from Eva-Engine
+// Custom Generator from EVA-rt-Engine
+struct AnalysisMaxBw {
+    pub base_analysis: fixed_priority::bcl09::Analysis,
+    pub max_per_core_bw: f64,
+}
+
+impl SchedAnalysis<(), &[RTTask]> for AnalysisMaxBw {
+    fn analyzer_name(&self) -> &str {
+        self.base_analysis.analyzer_name()
+    }
+
+    fn check_preconditions(&self, taskset: &&[RTTask]) -> Result<(), SchedError> {
+        self.base_analysis.check_preconditions(taskset)
+    }
+
+    fn run_test(&self, taskset: &[RTTask]) -> Result<(), SchedError> {
+        let model = &self.base_analysis.model;
+        let per_core_util =
+            model.resource / (model.concurrency as f64 * model.period);
+
+        if per_core_util > self.max_per_core_bw {
+            Err(SchedError::NonSchedulable(None))
+        } else {
+            self.base_analysis.run_test(taskset)
+        }
+    }
+}
 
 fn generate_interface_with_max_bw(
     taskset: &[RTTask],
@@ -133,47 +158,40 @@ fn generate_interface_with_max_bw(
     step_size: Time,
     max_cores: u64,
     max_per_core_bandwidth: f64,
-) -> Result<MPRModel, Error> {
-    use eva_engine::analyses::multiprocessor_periodic_resource_model::*;
+) -> anyhow::Result<MPRModel> {
+    if !RTUtils::constrained_deadlines(taskset) {
+        return Err(SchedError::constrained_deadlines().into());
+    }
 
-    AnalysisUtils::assert_constrained_deadlines(taskset)?;
-    AnalysisUtils::assert_integer_times(taskset)?;
-
-    generic::generate_interface(
-        taskset,
+    (extra::DesignerPeriodNaive {
         period,
-        generic::GenerationStrategy::MonotoneLinearSearch,
-        num_processors_lower_bound,
-        |taskset|
-            u64::min(num_processors_upper_bound(taskset), max_cores),
-        |taskset, model|
-            generic::minimum_required_resource(
-                taskset,
-                model,
-                step_size,
-                |taskset, model|
-                    Ok(generic::minimum_resource_for_taskset(taskset, model.period)),
-                |taskset, model|
-                    generic::minimum_required_resource_inv(
-                        taskset,
-                        model,
-                        |taskset, k, task_k, model, _|
-                            bcl_2009::demand_fp(taskset, k, task_k, model.concurrency),
-                        |demand, interval, model|
-                            resource_from_linear_sbf(demand, interval, model.period, model.concurrency),
-                        |_, _, _, _| Ok(Time::zero()),
-                        |_, _, _, _, _| true,
-                    ),
-                |taskset, model| {
-                    let per_core_util =
-                        model.resource / (model.concurrency as f64 * model.period);
+        concurrency_iter_fn: |_| {
+            let lb = f64::ceil(RTUtils::total_utilization(taskset)) as u64;
+            let ub = u64::min(taskset.len() as u64, max_cores);
 
-                    if per_core_util > max_per_core_bandwidth {
-                        Ok(false)
-                    } else {
-                        bcl_2009::is_schedulable_fp(taskset, model)
-                    }
-                }
-            )
-    )
+            Ok(Box::new(lb ..= ub))
+        },
+        resource_iter_fn:
+            |period, concurrency| {
+                let min_resource =
+                    RTUtils::total_utilization(taskset) * period;
+                let max_resource = {
+                    let designer = fixed_priority::bcl09::DesignerLinear { period, concurrency };
+
+                    designer.check_preconditions(&taskset)?;
+                    designer.run_designer(taskset)?.resource
+                };
+
+                Ok(Box::new(time_range_iterator_w_step(min_resource, max_resource, step_size)))
+            },
+        analysis_gen_fn: |resource, period, concurrency| {
+            AnalysisMaxBw {
+                base_analysis: fixed_priority::bcl09::Analysis{
+                    model: MPRModel { resource, period, concurrency }
+                },
+                max_per_core_bw: max_per_core_bandwidth,
+            }
+        },
+        marker: std::marker::PhantomData,
+    }).design(taskset)
 }
