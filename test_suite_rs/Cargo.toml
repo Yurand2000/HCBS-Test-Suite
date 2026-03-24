@@ -12,12 +12,9 @@ rand = "0.10.0"
 sysinfo = "0.38.4"
 sysconf = "0.3.4"
 crossbeam = "0.8.4"
-hcbs-utils = { git = "https://github.com/Yurand2000/hcbs-utils.git" }
 eva-rt-common = "0.1.1"
 eva-rt-engine = { git = "https://github.com/Yurand2000/EVA-rt-Engine" }
-
-[features]
-cgroup_v2 = []
+hcbs-utils = { git = "https://github.com/Yurand2000/hcbs-utils.git" }
 
 [[bin]]
 name = "regression"

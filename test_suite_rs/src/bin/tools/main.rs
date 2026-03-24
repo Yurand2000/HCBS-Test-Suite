@@ -11,6 +11,10 @@ pub enum Command {
     #[command(name = "hog", verbatim_doc_comment)]
     Hog,
 
+    /// Mount CGroup filesystem
+    #[command(name = "mount-cgroup-fs", verbatim_doc_comment)]
+    MountCgroupFS,
+
     /// Mount CGroup filesystem and CPU controller
     #[command(name = "mount-cgroup-cpu", verbatim_doc_comment)]
     MountCgroupCPU,
@@ -53,7 +57,8 @@ fn main() -> anyhow::Result<()> {
                 core::ptr::write_volatile(&mut i, i_val + 1);
             } }
         }
-        MountCgroupCPU => hcbs_utils::cgroup::mount_cgroup_fs()?,
+        MountCgroupFS => hcbs_utils::cgroup::mount_cgroup_fs()?,
+        MountCgroupCPU => hcbs_utils::cgroup::mount_cgroup_cpu()?,
         MountDebugFS => hcbs_utils::debugfs::mount_debug_fs()?,
         RealtimeBwChange(args) => realtime_bw_change::main(args)?,
         MoveRtTasksToRootCgroup => move_rt_to_root_cgroup::main()?,

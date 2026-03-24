@@ -27,38 +27,23 @@ $(BUILD)/mnt/root/tasksets/.keep: $(BUILD)/.keep
 	touch $@
 
 # test software
-.PHONY: cgroup cgroup_v1 cgroup_v2
+.PHONY: cgroup
 cgroup: $(BUILD)/cgroup.keep
-
-$(BUILD)/cgroup.keep: cgroup_v1 cgroup_v2
-	rm -f $(BUILD)/mnt/root/test_suite
-	ln -s ./test_suite_v2 $(BUILD)/mnt/root/test_suite
 
 RUSTFLAGS="-C target-feature=+crt-static"
 CARGO_HOME="$(BUILD)/rust/cargo"
 CARGO_TARGET_DIR="$(BUILD)/rust/target"
 
-cgroup_v2: $(BUILD)/mnt/.keep $(BUILD)/.keep
-	mkdir -p $(BUILD)/test_suite/v2
+$(BUILD)/cgroup.keep: $(BUILD)/mnt/.keep $(BUILD)/.keep
+	rm -rf $(BUILD)/test_suite
+	mkdir -p $(BUILD)/test_suite
 	RUSTFLAGS=$(RUSTFLAGS) \
 		CARGO_HOME=$(CARGO_HOME) \
 		CARGO_TARGET_DIR=$(CARGO_TARGET_DIR) \
-		cargo install --path ./test_suite_rs --root $(BUILD)/test_suite/v2 \
-		--no-track --features cgroup_v2 --target x86_64-unknown-linux-gnu
-	mkdir -p $(BUILD)/mnt/root/test_suite_v2
-	cp -r $(BUILD)/test_suite/v2/bin/* $(BUILD)/mnt/root/test_suite_v2/
-	rm -rf $(BUILD)/test_suite/v2
-
-cgroup_v1: $(BUILD)/mnt/.keep $(BUILD)/.keep
-	mkdir -p $(BUILD)/test_suite/v1
-	RUSTFLAGS=$(RUSTFLAGS) \
-		CARGO_HOME=$(CARGO_HOME) \
-		CARGO_TARGET_DIR=$(CARGO_TARGET_DIR) \
-		cargo install --path ./test_suite_rs --root $(BUILD)/test_suite/v1 \
+		cargo install --path ./test_suite_rs --root $(BUILD)/test_suite \
 		--no-track --target x86_64-unknown-linux-gnu
-	mkdir -p $(BUILD)/mnt/root/test_suite_v1
-	cp -r $(BUILD)/test_suite/v1/bin/* $(BUILD)/mnt/root/test_suite_v1/
-	rm -rf $(BUILD)/test_suite/v1
+	mkdir -p $(BUILD)/mnt/root/test_suite
+	cp -r $(BUILD)/test_suite/bin/* $(BUILD)/mnt/root/test_suite/
 
 # extra scripts
 SCRIPTS = $(wildcard scripts/*)
