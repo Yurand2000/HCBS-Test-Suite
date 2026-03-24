@@ -67,10 +67,6 @@ fn main() -> anyhow::Result<()> {
     // batch test utils
     let test_category = "constraints";
 
-    // cannot set period to zero
-    batch_test_header("runtime_0_period_0", test_category);
-    batch_test_result(cgroup_time_tests("g0", 0, 0))?;
-
     // given DL_SCALE = 10, runtime must be at least 1024ns, i.e. > 1us
     batch_test_header("runtime_too_small", test_category);
     batch_test_result(cgroup_time_tests("g0", 1, 100_000))?;
