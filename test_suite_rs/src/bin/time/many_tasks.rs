@@ -89,12 +89,12 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippa
     // run the tasks
     let cgroup = MyCgroup::new(&args.cgroup, args.runtime_ms * 1000, args.period_ms * 1000, true)?;
 
-    assign_pid_to_cgroup(&args.cgroup, std::process::id())?;
+    assign_pid_to_cgroup(&args.cgroup, 0)?;
 
     let procs = (0..args.num_tasks)
         .map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
 
-    set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
+    set_sched_policy(0, SchedPolicy::RR(99))?;
     procs.iter()
         .try_for_each(|proc| -> anyhow::Result<()> {
             assign_pid_to_cgroup(&args.cgroup, proc.id())?;
@@ -115,8 +115,8 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippa
     procs.into_iter()
         .try_for_each(|mut proc| proc.kill())?;
 
-    set_sched_policy(std::process::id(), SchedPolicy::other())?;
-    assign_pid_to_cgroup(".", std::process::id())?;
+    set_sched_policy(0, SchedPolicy::other())?;
+    assign_pid_to_cgroup(".", 0)?;
     cgroup.destroy()?;
 
     Ok(Skippable::Result(total_usage))

@@ -25,7 +25,7 @@ impl MyCgroup {
 
         set_cgroup_runtime_us(name, 0)?;
         set_cgroup_period_us(name, period_us)?;
-        set_cgroup_period_us(name, runtime_us)?;
+        set_cgroup_runtime_us(name, runtime_us)?;
 
         Ok(MyCgroup {
             name: name.to_owned(),
