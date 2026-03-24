@@ -36,9 +36,9 @@ pub enum Command {
     SchedFifo(sched_fifo::MyArgs),
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> anyhow::Result<()> {
     let args = <Command as clap::Parser>::parse();
-    hcbs_test_suite::cgroup::mount_cgroup_fs()?;
+    hcbs_utils::cgroup::mount_cgroup_fs()?;
 
     use Command::*;
 

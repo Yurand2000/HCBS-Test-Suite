@@ -4,7 +4,6 @@ use crate::tests::generic::{
     __os_str_to_str,
     __path_to_str,
 };
-use eva_rt_engine::prelude::*;
 
 pub mod prelude {
     pub use super::parser::prelude::*;
@@ -22,12 +21,12 @@ pub fn run_taskset_array<FnSpeed, FnRun>(
     args: &RunnerArgsAll,
     fn_compute_cpu_speed: FnSpeed,
     fn_run_taskset: FnRun,
-) -> Result<Vec<TasksetRunResult>, Box<dyn std::error::Error>>
+) -> anyhow::Result<Vec<TasksetRunResult>>
     where
         FnSpeed:        Fn()
-                          -> Result<u64, Box<dyn std::error::Error>>,
+                          -> anyhow::Result<u64>,
         FnRun:          Fn(TasksetRun, &RunnerArgsBase, Option<u64>)
-                            -> Result<TasksetRunResult, Box<dyn std::error::Error>>,
+                            -> anyhow::Result<TasksetRunResult>,
 {
     check_root_cgroup(&args.args)?;
 
@@ -83,12 +82,12 @@ pub fn run_taskset_single<FnSpeed, FnRun>(
     args: &RunnerArgsSingle,
     fn_compute_cpu_speed: FnSpeed,
     fn_run_taskset: FnRun,
-) -> Result<Option<TasksetRunResult>, Box<dyn std::error::Error>>
+) -> anyhow::Result<Option<TasksetRunResult>>
     where
         FnSpeed:        Fn()
-                            -> Result<u64, Box<dyn std::error::Error>>,
+                            -> anyhow::Result<u64>,
         FnRun:          Fn(TasksetRun, &RunnerArgsBase, Option<u64>)
-                            -> Result<TasksetRunResult, Box<dyn std::error::Error>>,
+                            -> anyhow::Result<TasksetRunResult>,
 {
     check_root_cgroup(&args.args)?;
 
@@ -103,7 +102,7 @@ pub fn run_taskset_single<FnSpeed, FnRun>(
 
 pub fn read_taskset_results(
     args: &RunnerArgsAll
-) -> Result<Vec<TasksetRunResult>, Box<dyn std::error::Error>> {
+) -> anyhow::Result<Vec<TasksetRunResult>> {
     let taskset_runs = get_taskset_runs(&args)?;
 
     // taskset first insights
@@ -155,7 +154,7 @@ pub fn read_taskset_results(
     Ok(results)
 }
 
-fn get_taskset_run(taskset: &str, config: &str, output_file: &str) -> Result<TasksetRun, Box<dyn std::error::Error>> {
+fn get_taskset_run(taskset: &str, config: &str, output_file: &str) -> anyhow::Result<TasksetRun> {
     let taskset = parse_taskset(&read_all_file(taskset)?)?;
     let config = parse_config(&read_all_file(config)?)?;
 
@@ -166,12 +165,12 @@ fn get_taskset_run(taskset: &str, config: &str, output_file: &str) -> Result<Tas
     })
 }
 
-fn get_taskset_runs(args: &RunnerArgsAll) -> Result<Vec<TasksetRun>, Box<dyn std::error::Error>> {
+fn get_taskset_runs(args: &RunnerArgsAll) -> anyhow::Result<Vec<TasksetRun>> {
     let tasksets_dir = &args.tasksets_dir;
 
     let mut taskset_runs = Vec::new();
     for taskset_dir in std::fs::read_dir(&tasksets_dir)
-        .map_err(|err| format!("Tasksets directory {} error: {}", &tasksets_dir, err))?
+        .map_err(|err| anyhow::format_err!("Tasksets directory {} error: {}", &tasksets_dir, err))?
     {
         let taskset_dir = taskset_dir?.path();
         if !taskset_dir.is_dir() {
@@ -179,15 +178,13 @@ fn get_taskset_runs(args: &RunnerArgsAll) -> Result<Vec<TasksetRun>, Box<dyn std
         }
 
         let files = std::fs::read_dir(&taskset_dir)
-            .map_err(|err| format!("Taskset data directory {:?} error: {}", &taskset_dir, err))?
+            .map_err(|err| anyhow::format_err!("Taskset data directory {:?} error: {}", &taskset_dir, err))?
             .map(|entry| entry.map(|entry| entry.path()))
             .filter(|entry| entry.as_ref().is_ok_and(|entry| entry.is_file()))
             .map(|file| file
-                .map_err(|err| Into::<Box<dyn std::error::Error>>::into(err))
+                .map_err(|err| Into::<anyhow::Error>::into(err))
                 .and_then(|file| file.file_name()
-                    .ok_or_else(|| Into::<Box<dyn std::error::Error>>::into(
-                        format!("File name not found"))
-                    )
+                    .ok_or_else(|| anyhow::format_err!("File name not found"))
                     .and_then(|file| __os_str_to_str(file))
                 )
             )
@@ -195,7 +192,7 @@ fn get_taskset_runs(args: &RunnerArgsAll) -> Result<Vec<TasksetRun>, Box<dyn std
 
         let taskset_dir = __path_to_str(taskset_dir.as_path())?;
         if files.iter().find(|file| *file == "taskset.txt").is_none() {
-            Err(format!("taskset.txt file not found for taskset {}", taskset_dir))?;
+            anyhow::bail!("taskset.txt file not found for taskset {}", taskset_dir);
         }
 
         if files.len() <= 1 {
@@ -249,10 +246,10 @@ fn run_taskset_one<FnRun>(
     args: &RunnerArgsBase,
     cycles: Option<u64>,
     run_taskset: &FnRun,
-) -> Result<Option<TasksetRunResult>, Box<dyn std::error::Error>>
+) -> anyhow::Result<Option<TasksetRunResult>>
     where
         FnRun:          Fn(TasksetRun, &RunnerArgsBase, Option<u64>)
-                            -> Result<TasksetRunResult, Box<dyn std::error::Error>>,
+                            -> anyhow::Result<TasksetRunResult>,
 {
     let already_run = std::path::Path::new(&run.results_file).exists();
 
@@ -287,10 +284,10 @@ fn run_taskset_one<FnRun>(
 
             // create results file
             let dirs = results_file.parent()
-                .ok_or_else(|| format!("Unknown parent"))?;
+                .ok_or_else(|| anyhow::format_err!("Unknown parent"))?;
 
             std::fs::create_dir_all(dirs)
-                .map_err(|err| format!("Error in creating directory(ies) {dirs:?}: {err}"))?;
+                .map_err(|err| anyhow::format_err!("Error in creating directory(ies) {dirs:?}: {err}"))?;
 
             std::fs::write(results_file, serialize_result(&result.taskset, &result.results)?)?;
 
@@ -309,7 +306,7 @@ fn run_taskset_one<FnRun>(
     Ok(Some(result))
 }
 
-pub fn run_taskset_pre_asserts(run: &TasksetRun, args: &RunnerArgsBase) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run_taskset_pre_asserts(run: &TasksetRun, args: &RunnerArgsBase) -> anyhow::Result<()> {
     if run.config.cpus > args.max_num_cpus {
         println!("- Error on taskset {}, config {}", run.taskset.name, run.config.name);
         println!("  Attempted to run taskset with {0} CPUs on a maximum of {1} CPUs",
@@ -328,12 +325,12 @@ pub fn run_taskset_pre_asserts(run: &TasksetRun, args: &RunnerArgsBase) -> Resul
     Ok(())
 }
 
-pub fn run_taskset_post_asserts(result: &TasksetRunResult, args: &RunnerArgsBase) -> Result<(), Box<dyn std::error::Error>> {
+pub fn run_taskset_post_asserts(result: &TasksetRunResult, args: &RunnerArgsBase) -> anyhow::Result<()> {
     for job_result in result.results.iter() {
         if job_result.rel_start_time > job_result.rel_finishing_time {
-            return Err(format!("Taskset {}, config {}, generated an incorrect output: task {}, job {} \
+            anyhow::bail!("Taskset {}, config {}, generated an incorrect output: task {}, job {} \
                                finished its execution before starting.",
-                               result.taskset.name, result.config.name, job_result.task, job_result.instance).into());
+                               result.taskset.name, result.config.name, job_result.task, job_result.instance);
         }
     }
 
@@ -344,8 +341,8 @@ pub fn run_taskset_post_asserts(result: &TasksetRunResult, args: &RunnerArgsBase
             .count();
 
         if ith_job_instances < args.num_instances_per_job as usize {
-            return Err(format!("Taskset {}, config {}, generated an incorrect output: task {}, jobs {}",
-                               result.taskset.name, result.config.name, i, ith_job_instances).into());
+            anyhow::bail!("Taskset {}, config {}, generated an incorrect output: task {}, jobs {}",
+                               result.taskset.name, result.config.name, i, ith_job_instances);
         }
     }
 

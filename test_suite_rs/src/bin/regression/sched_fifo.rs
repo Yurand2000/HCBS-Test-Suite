@@ -19,12 +19,12 @@ pub struct MyArgs {
     pub max_time: Option<u64>
 }
 
-pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<()> {
     if is_batch_test() && args.max_time.is_none() {
-        Err(format!("Batch testing requires a maximum running time"))?;
+        anyhow::bail!("Batch testing requires a maximum running time");
     }
 
-    let cpus = num_cpus::get();
+    let cpus = CpuSet::all()?.num_cpus();
     let cgroup_expected_bw = cpus as f64 * args.runtime_ms as f64 / args.period_ms as f64;
     let fifo_expected_bw = cpus as f64 - cgroup_expected_bw;
     let cgroup_error = cgroup_expected_bw * 0.025; // 2.5% error
@@ -42,11 +42,11 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Bo
     let result = main(args, ctrlc_flag)
         .and_then(|(fifo_bw, cgroup_bw)| {
             if f64::abs(cgroup_bw - cgroup_expected_bw) >= cgroup_error {
-                return Err(format!("Expected cgroup tasks to use {:.2} units of total runtime, but used {:.2} units", cgroup_expected_bw, cgroup_bw).into());
+                anyhow::bail!("Expected cgroup tasks to use {:.2} units of total runtime, but used {:.2} units", cgroup_expected_bw, cgroup_bw);
             }
 
             if f64::abs(fifo_bw - fifo_expected_bw) >= fifo_error {
-                return Err(format!("Expected SCHED_FIFO tasks to use {:.2} units of total runtime, but used {:.2} units", fifo_expected_bw, fifo_bw).into());
+                anyhow::bail!("Expected SCHED_FIFO tasks to use {:.2} units of total runtime, but used {:.2} units", fifo_expected_bw, fifo_bw);
             }
 
             Ok(format!("Cgroup processes got {:.2} units of total runtime, while SCHED_FIFO processes got {:.2} units of total runtime ", cgroup_bw, fifo_bw))
@@ -59,26 +59,26 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Bo
     }
 }
 
-pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(f64, f64), Box<dyn std::error::Error>> {
-    let cpus = num_cpus::get();
+pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, f64)> {
+    let cpus = CpuSet::all()?.num_cpus();
     let cgroup = MyCgroup::new(&args.cgroup, args.runtime_ms * 1000, args.period_ms * 1000, false)?;
 
-    migrate_task_to_cgroup(".", std::process::id())?;
+    assign_pid_to_cgroup(".", std::process::id())?;
     let fifo_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
     let cgroup_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
 
-    set_scheduler(std::process::id(), SchedPolicy::FIFO(99))?;
+    set_sched_policy(std::process::id(), SchedPolicy::FIFO(99))?;
     cgroup_processes.iter().enumerate()
         .try_for_each(|(cpu, proc)| {
-            migrate_task_to_cgroup(&args.cgroup, proc.id())?;
+            assign_pid_to_cgroup(&args.cgroup, proc.id())?;
             set_cpuset_to_pid(proc.id(), &CpuSet::single(cpu as u32)?)?;
-            set_scheduler(proc.id(), SchedPolicy::FIFO(50))
-                .map_err(|err| Into::<Box<dyn std::error::Error>>::into(err))
+            set_sched_policy(proc.id(), SchedPolicy::FIFO(50))
+                .map_err(|err| Into::<anyhow::Error>::into(err))
         })?;
 
     fifo_processes.iter().enumerate()
         .try_for_each(|(cpu, proc)| {
-            set_scheduler(proc.id(), SchedPolicy::FIFO(50))?;
+            set_sched_policy(proc.id(), SchedPolicy::FIFO(50))?;
             set_cpuset_to_pid(proc.id(), &CpuSet::single(cpu as u32)?)
         })?;
 

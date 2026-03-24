@@ -5,7 +5,7 @@ pub struct MyArgs {
     enable: bool,
 }
 
-pub fn main(args: MyArgs) -> Result<(), Box<dyn std::error::Error>> {
+pub fn main(args: MyArgs) -> anyhow::Result<()> {
     let feature_str =
         if args.enable {
             "HRTICK_DL"

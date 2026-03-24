@@ -27,16 +27,16 @@ pub struct MyArgs {
     pub max_time: Option<u64>,
 }
 
-pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<()> {
     if is_batch_test() && args.max_time.is_none() {
-        Err(format!("Batch testing requires a maximum running time"))?;
+        anyhow::bail!("Batch testing requires a maximum running time");
     }
 
     let test_header = format!("change_runtime c{} r{} R{} p{} P{:.2}",
         args.cgroup, args.runtime1_ms, args.runtime2_ms, args.period_ms, args.change_period);
     let test_header =
         if is_batch_test() {
-            test_header 
+            test_header
         } else {
             test_header + "(Ctrl+C to stop)"
         };
@@ -47,10 +47,10 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Bo
     Ok(())
 }
 
-pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<()> {
     let mut cgroup = MyCgroup::new(&args.cgroup, args.runtime1_ms * 1000, args.period_ms * 1000, true)?;
-    migrate_task_to_cgroup(&args.cgroup, std::process::id())?;
-    set_scheduler(std::process::id(), SchedPolicy::RR(99))?;
+    assign_pid_to_cgroup(&args.cgroup, std::process::id())?;
+    set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
 
     let mut proc = run_yes()?;
     let mut state = args.runtime1_ms;
@@ -65,12 +65,12 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Box<dyn st
         cgroup.update_runtime(state)?;
         Ok(())
     };
-    
+
     wait_loop_periodic_fn(args.change_period, args.max_time, ctrlc_flag, update_fn)?;
 
     proc.kill()?;
-    set_scheduler(std::process::id(), SchedPolicy::other())?;
-    migrate_task_to_cgroup(".", std::process::id())?;
+    set_sched_policy(std::process::id(), SchedPolicy::other())?;
+    assign_pid_to_cgroup(".", std::process::id())?;
     cgroup.destroy()?;
 
     Ok(())

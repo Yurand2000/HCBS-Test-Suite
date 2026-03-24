@@ -7,9 +7,9 @@ pub struct MyArgs {
     pub max_time: Option<u64>
 }
 
-pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<()> {
     if is_batch_test() && args.max_time.is_none() {
-        Err(format!("Batch testing requires a maximum running time"))?;
+        anyhow::bail!("Batch testing requires a maximum running time");
     }
 
     let fair_server_bw = get_fair_server_avg_bw()?;
@@ -29,7 +29,7 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Bo
             if f64::abs(used_bw - fair_server_bw) < error {
                 Ok(format!("SCHED_OTHER processes got {:.2} % of total runtime.", used_bw * 100f64))
             } else {
-                Err(format!("Expected SCHED_OTHER tasks to use {:.2} % of total runtime, but used {:.2} %", used_bw * 100.0, fair_server_bw * 100.0).into())
+                Err(anyhow::format_err!("Expected SCHED_OTHER tasks to use {:.2} % of total runtime, but used {:.2} %", used_bw * 100.0, fair_server_bw * 100.0))
             }
         });
 
@@ -40,14 +40,14 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Bo
     }
 }
 
-pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<f64, Box<dyn std::error::Error>> {
-    let cpus = num_cpus::get();
+pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<f64> {
+    let cpus = CpuSet::all()?.num_cpus();
 
-    migrate_task_to_cgroup(".", std::process::id())?;
+    assign_pid_to_cgroup(".", std::process::id())?;
     let fifo_processes = (0..cpus).map(|_| cpu_hog()).collect::<Result<Vec<_>, _>>()?;
     let non_fifo_processes = (0..cpus).map(|_| cpu_hog()).collect::<Result<Vec<_>, _>>()?;
 
-    set_scheduler(std::process::id(), SchedPolicy::RR(99))?;
+    set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
     non_fifo_processes.iter()
         .enumerate()
         .try_for_each(|(i, proc)| {
@@ -56,9 +56,9 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<f64, Box<dyn s
 
     fifo_processes.iter()
         .enumerate()
-        .try_for_each::<_, Result<_, Box<dyn std::error::Error>>>(|(i, proc)| {
+        .try_for_each::<_, anyhow::Result<_>>(|(i, proc)| {
             set_cpuset_to_pid(proc.id(), &CpuSet::single(i as u32)?)?;
-            set_scheduler(proc.id(), SchedPolicy::RR(50))?;
+            set_sched_policy(proc.id(), SchedPolicy::RR(50))?;
 
             Ok(())
         })?;

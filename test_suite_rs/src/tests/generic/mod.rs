@@ -1,5 +1,4 @@
 use crate::prelude::*;
-use eva_rt_engine::prelude::*;
 
 pub mod prelude {
     pub use super::runner_args::prelude::*;
@@ -114,14 +113,14 @@ pub fn can_run_taskset(run: &TasksetRun, args: &RunnerArgsBase) -> bool {
     true
 }
 
-pub fn check_root_cgroup(args: &RunnerArgsBase) -> Result<(), Box<dyn std::error::Error>> {
+pub fn check_root_cgroup(args: &RunnerArgsBase) -> anyhow::Result<()> {
     mount_cgroup_fs()?;
-    let cgroup_period = crate::cgroup::get_cgroup_period_us(".")?;
-    let cgroup_runtime = crate::cgroup::get_cgroup_runtime_us(".")?;
+    let cgroup_period = get_cgroup_period_us(".")?;
+    let cgroup_runtime = get_cgroup_runtime_us(".")?;
     let cgroup_bw = cgroup_runtime as f64 / cgroup_period as f64;
     if cgroup_bw < args.max_allocable_bw {
-        return Err(format!("Cannot run tasksets as the maximum allocable bandwidth is {cgroup_bw}, \
-                            while you are requesting {} max bw", args.max_allocable_bw).into());
+        anyhow::bail!("Cannot run tasksets as the maximum allocable bandwidth is {cgroup_bw}, \
+                            while you are requesting {} max bw", args.max_allocable_bw);
     }
 
     Ok(())
@@ -129,13 +128,11 @@ pub fn check_root_cgroup(args: &RunnerArgsBase) -> Result<(), Box<dyn std::error
 
 /* -------------------------------------------------------------------------- */
 
-pub fn __os_str_to_str(string: &std::ffi::OsStr) -> Result<String, Box<dyn std::error::Error>> {
-    Ok(
-        string.to_os_string().into_string()
-            .map_err(|err| format!("Conversion error: {err:?}"))?
-    )
+pub fn __os_str_to_str(string: &std::ffi::OsStr) -> anyhow::Result<String> {
+    string.to_os_string().into_string()
+        .map_err(|err| anyhow::format_err!("Conversion error: {err:?}"))
 }
 
-pub fn __path_to_str(path: &std::path::Path) -> Result<String, Box<dyn std::error::Error>> {
+pub fn __path_to_str(path: &std::path::Path) -> anyhow::Result<String> {
     __os_str_to_str(path.to_path_buf().as_os_str())
 }

@@ -8,7 +8,7 @@ pub mod prelude {
 	};
 }
 
-pub fn generate_calibration_config(out_file: &str) -> Result<(), Box<dyn std::error::Error>> {
+pub fn generate_calibration_config(out_file: &str) -> anyhow::Result<()> {
     let calibration_config =
 r#"{
     "global" : {
@@ -34,7 +34,7 @@ r#"{
 }"#;
 
     std::fs::write(&out_file, calibration_config)
-        .map_err(|err| format!("Error in writing file {out_file}, reason {err}").into())
+        .map_err(|err| anyhow::format_err!("Error in writing file {out_file}, reason {err}").into())
 }
 
 pub fn generate_taskset_config(
@@ -43,7 +43,7 @@ pub fn generate_taskset_config(
 	calibration: Option<u64>,
 	log_dir: &str,
 	out_file: &str,
-) -> Result<(), Box<dyn std::error::Error>> {
+) -> anyhow::Result<()> {
     let duration =
         taskset.tasks.iter()
             .map(|task| task.period)
@@ -112,5 +112,5 @@ format!(r#"{{
 }}"#, global_config, tasks_config);
 
     std::fs::write(out_file, config)
-        .map_err(|err| format!("Error in writing file {out_file}, reason {err}").into())
+        .map_err(|err| anyhow::format_err!("Error in writing file {out_file}, reason {err}"))
 }

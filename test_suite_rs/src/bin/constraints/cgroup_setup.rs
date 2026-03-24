@@ -1,68 +1,68 @@
 use hcbs_test_suite::*;
 use hcbs_test_suite::prelude::*;
 
-fn cgroup_time_tests(cgroup_name: &str, runtime_us: u64, period_us: u64) -> Result<(), Box<dyn std::error::Error>> {
-    use hcbs_test_suite::cgroup::{__set_cgroup_period_us, __set_cgroup_runtime_us};
-
+fn cgroup_time_tests(cgroup_name: &str, runtime_us: u64, period_us: u64) -> anyhow::Result<()> {
     create_cgroup(cgroup_name)?;
 
-    let failure: Result<(), _> = 
-        __set_cgroup_period_us(cgroup_name, period_us)
-            .and_then(|_| __set_cgroup_runtime_us(cgroup_name, runtime_us));
+    let failure: Result<(), _> =
+        set_cgroup_period_us(cgroup_name, period_us)
+            .and_then(|_| set_cgroup_runtime_us(cgroup_name, runtime_us));
 
     delete_cgroup(cgroup_name)?;
 
     if failure.is_ok() {
-        Err(format!("Cgroup \'{cgroup_name}\' creation with {runtime_us}/{period_us} did not fail"))?
+        anyhow::bail!("Cgroup \'{cgroup_name}\' creation with {runtime_us}/{period_us} did not fail")
     } else {
         Ok(())
     }
 }
 
-fn add_task_to_runtime_zero(cgroup_name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    cgroup_setup(cgroup_name, 0, 100_000)?;
+fn add_task_to_runtime_zero(cgroup_name: &str) -> anyhow::Result<()> {
+    create_cgroup(cgroup_name)?;
+    set_cgroup_period_us(cgroup_name, 100_000)?;
+    set_cgroup_runtime_us(cgroup_name, 0)?;
     let mut yes = run_yes()?;
 
-    let failure: Result<(), Box<dyn std::error::Error>> =
-        set_scheduler(yes.id(), SchedPolicy::RR(50)).map_err(|err| err.into())
-            .and_then(|_| migrate_task_to_cgroup(cgroup_name, yes.id()));
+    let failure: anyhow::Result<()> =
+        set_sched_policy(yes.id(), SchedPolicy::RR(50)).map_err(|err| err.into())
+            .and_then(|_| assign_pid_to_cgroup(cgroup_name, yes.id()));
 
     yes.kill()?;
     delete_cgroup(cgroup_name)?;
 
     if failure.is_ok() {
-        Err(format!("Cgroup with 0 runtime must not allow to run tasks"))?
+        anyhow::bail!("Cgroup with 0 runtime must not allow to run tasks")
     } else {
         Ok(())
     }
 }
 
-fn set_runtime_zero_to_active(cgroup_name: &str) -> Result<(), Box<dyn std::error::Error>> {
-    use hcbs_test_suite::cgroup::__set_cgroup_runtime_us;
-
-    cgroup_setup(cgroup_name, 10_000, 100_000)?;
+fn set_runtime_zero_to_active(cgroup_name: &str) -> anyhow::Result<()> {
+    create_cgroup(cgroup_name)?;
+    set_cgroup_period_us(cgroup_name, 100_000)?;
+    set_cgroup_runtime_us(cgroup_name, 10_000)?;
     let mut yes = run_yes()?;
-    set_scheduler(yes.id(), SchedPolicy::RR(50))?;
-    migrate_task_to_cgroup(cgroup_name, yes.id())?;
+    set_sched_policy(yes.id(), SchedPolicy::RR(50))?;
+    assign_pid_to_cgroup(cgroup_name, yes.id())?;
 
-    let failed = __set_cgroup_runtime_us(cgroup_name, 0);
+    let failed = set_cgroup_runtime_us(cgroup_name, 0);
 
     yes.kill()?;
-    migrate_task_to_cgroup(".", yes.id())?;
+    assign_pid_to_cgroup(".", yes.id())?;
     delete_cgroup(cgroup_name)?;
 
     if failed.is_ok() {
-        Err(format!("Cannot set runtime zero to cgroup with active tasks"))?
+        anyhow::bail!("Cannot set runtime zero to cgroup with active tasks")
     } else {
         Ok(())
     }
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> anyhow::Result<()> {
     mount_cgroup_fs()?;
 
-    migrate_task_to_cgroup(".", std::process::id())?;
-    set_scheduler(std::process::id(), SchedPolicy::RR(99))?;
+    assign_pid_to_cgroup(".", std::process::id())?;
+    set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
 
     // batch test utils
     let test_category = "constraints";

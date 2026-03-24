@@ -44,7 +44,7 @@ impl rand::distr::Distribution<TestType> for rand::distr::StandardUniform {
     }
 }
 
-pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<()> {
     unsafe { set_batch_test(); }
 
     let ctrlc_flag = match ctrlc_flag {
@@ -121,7 +121,7 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Box<dyn st
                     max_time: Some(args.max_time_per_test),
                 },  Some(ctrlc_flag.clone()),
                 )?
-                
+
             },
             TestType::Migrate => {
                 let runtime_ms = rand.random_range(runtime_min_ms..runtime_max_ms);
@@ -135,7 +135,7 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Box<dyn st
                     max_time: Some(args.max_time_per_test),
                 },  Some(ctrlc_flag.clone()),
                 )?
-                
+
             },
             TestType::SwitchClass => {
                 let runtime_ms = rand.random_range(runtime_min_ms..runtime_max_ms);

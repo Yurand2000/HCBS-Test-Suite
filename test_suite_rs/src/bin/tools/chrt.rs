@@ -19,8 +19,8 @@ pub struct MyArgs {
     pub period_ms: u64,
 }
 
-pub fn main(args: MyArgs) -> Result<(), Box<dyn std::error::Error>> {
-    set_scheduler(args.pid, SchedPolicy::DEADLINE {
+pub fn main(args: MyArgs) -> anyhow::Result<()> {
+    set_sched_policy(args.pid, SchedPolicy::DEADLINE {
         runtime_ms: args.runtime_ms,
         deadline_ms: args.deadline_ms,
         period_ms: args.period_ms,

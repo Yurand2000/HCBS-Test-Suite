@@ -1,6 +1,5 @@
 use crate::prelude::*;
 use crate::tests::prelude::*;
-use eva_rt_engine::prelude::*;
 
 pub mod prelude {
     pub use super::{
@@ -10,7 +9,7 @@ pub mod prelude {
 }
 
 #[inline(always)]
-pub fn main_run_taskset_array(args: RunnerArgsAll) -> Result<Vec<TasksetRunResult>, Box<dyn std::error::Error>> {
+pub fn main_run_taskset_array(args: RunnerArgsAll) -> anyhow::Result<Vec<TasksetRunResult>> {
     run_taskset_array(
         &args,
         compute_cpu_speed,
@@ -19,7 +18,7 @@ pub fn main_run_taskset_array(args: RunnerArgsAll) -> Result<Vec<TasksetRunResul
 }
 
 #[inline(always)]
-pub fn main_run_taskset_single(args: RunnerArgsSingle) -> Result<Option<TasksetRunResult>, Box<dyn std::error::Error>> {
+pub fn main_run_taskset_single(args: RunnerArgsSingle) -> anyhow::Result<Option<TasksetRunResult>> {
     run_taskset_single(
         &args,
         compute_cpu_speed,
@@ -28,14 +27,14 @@ pub fn main_run_taskset_single(args: RunnerArgsSingle) -> Result<Option<TasksetR
 }
 
 fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>)
-    -> Result<TasksetRunResult, Box<dyn std::error::Error>>
+    -> anyhow::Result<TasksetRunResult>
 {
     let tmp_output_file = "/tmp/out.txt";
     if std::fs::exists(tmp_output_file)
-        .map_err(|err| format!("Error in checking existance of {tmp_output_file}: {err}"))?
+        .map_err(|err| anyhow::format_err!("Error in checking existance of {tmp_output_file}: {err}"))?
     {
         std::fs::remove_file(tmp_output_file)
-            .map_err(|err| format!("Error in removing {tmp_output_file}: {err}"))?
+            .map_err(|err| anyhow::format_err!("Error in removing {tmp_output_file}: {err}"))?
     }
 
     let cgroup = MyCgroup::new(
@@ -45,8 +44,8 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>)
         true
     )?;
 
-    migrate_task_to_cgroup(&args.cgroup, std::process::id())?;
-    set_scheduler(std::process::id(), SchedPolicy::RR(99))?;
+    assign_pid_to_cgroup(&args.cgroup, std::process::id())?;
+    set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
     set_cpuset_to_pid(std::process::id(), &CpuSet::any_subset(run.config.cpus)?)?;
 
     let pthread_data = PeriodicThreadData {
@@ -60,11 +59,11 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>)
 
     let mut proc = run_periodic_thread(pthread_data)?;
     proc.wait()
-        .map_err(|err| format!("Error in waiting for periodic_thread: {err}"))?;
+        .map_err(|err| anyhow::format_err!("Error in waiting for periodic_thread: {err}"))?;
 
     set_cpuset_to_pid(std::process::id(), &CpuSet::all()?)?;
-    set_scheduler(std::process::id(), SchedPolicy::other())?;
-    migrate_task_to_cgroup(".", std::process::id())?;
+    set_sched_policy(std::process::id(), SchedPolicy::other())?;
+    assign_pid_to_cgroup(".", std::process::id())?;
 
     cgroup.destroy()?;
 
@@ -77,12 +76,12 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>)
     Ok(result)
 }
 
-fn compute_cpu_speed() -> Result<u64, Box<dyn std::error::Error>> {
+fn compute_cpu_speed() -> anyhow::Result<u64> {
     let out_file = format!("/tmp/calibration_data.txt");
 
     // run periodic thread to calibrate
-    migrate_task_to_cgroup(".", std::process::id())?;
-    set_scheduler(std::process::id(), SchedPolicy::RR(99))?;
+    assign_pid_to_cgroup(".", std::process::id())?;
+    set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
     set_cpuset_to_pid(std::process::id(), &CpuSet::any_subset(1)?)?;
 
     let mut proc = run_periodic_thread(PeriodicThreadData {
@@ -98,26 +97,26 @@ fn compute_cpu_speed() -> Result<u64, Box<dyn std::error::Error>> {
         out_file: out_file.clone(),
     })?;
     proc.wait()
-        .map_err(|err| format!("Error in waiting for periodic_thread: {err}"))?;
+        .map_err(|err| anyhow::format_err!("Error in waiting for periodic_thread: {err}"))?;
 
     set_cpuset_to_pid(std::process::id(), &CpuSet::all()?)?;
-    set_scheduler(std::process::id(), SchedPolicy::other())?;
+    set_sched_policy(std::process::id(), SchedPolicy::other())?;
 
     // read calibration results
     let out_data = std::fs::read_to_string(&out_file)
-        .map_err(|err| format!("Couldn't read file: {}, reason: {}", out_file, err))?;
+        .map_err(|err| anyhow::format_err!("Couldn't read file: {}, reason: {}", out_file, err))?;
     out_data.lines().find(|line| line.starts_with("#Cycles:"))
-        .ok_or(format!("Calibration error: Cycles measuring not found").into())
+        .ok_or(anyhow::format_err!("Calibration error: Cycles measuring not found"))
         .and_then(|line| {
             line.trim_ascii().split_ascii_whitespace().skip(1).next()
-                .ok_or(format!("Calibration error: Cycles measuring not found [2]").into())
+                .ok_or(anyhow::format_err!("Calibration error: Cycles measuring not found [2]"))
             .and_then(|cycles| cycles.parse::<u64>()
-                .map_err(|err| format!("Calibration error: {err}").into())
+                .map_err(|err| anyhow::format_err!("Calibration error: {err}"))
             )
         })
 }
 
-fn parse_taskset_results(out_file: &str) -> Result<Vec<TasksetRunResultInstance>, Box<dyn std::error::Error>> {
+fn parse_taskset_results(out_file: &str) -> anyhow::Result<Vec<TasksetRunResultInstance>> {
     use nom::Parser;
     use nom::multi::*;
     use nom::character::complete::*;
@@ -125,7 +124,7 @@ fn parse_taskset_results(out_file: &str) -> Result<Vec<TasksetRunResultInstance>
     use nom::sequence::*;
 
     let data = std::fs::read_to_string(out_file)
-        .map_err(|err| format!("Failed to read output file {}: {}", out_file, err))?;
+        .map_err(|err| anyhow::format_err!("Failed to read output file {}: {}", out_file, err))?;
 
     let u64_parser = || map_res(digit1::<&str, ()>, |num: &str| num.parse::<u64>());
     let f64_parser = map_res(recognize((
@@ -167,7 +166,7 @@ fn parse_taskset_results(out_file: &str) -> Result<Vec<TasksetRunResultInstance>
             }
         })
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|err| format!("Taskset result parser error: {err}").into())
+        .map_err(|err| anyhow::format_err!("Taskset result parser error: {err}"))
 }
 
 #[derive(Debug)]
@@ -181,18 +180,18 @@ pub struct PeriodicThreadData {
     pub out_file: String,
 }
 
-pub fn run_periodic_thread(args: PeriodicThreadData) -> Result<MyProcess, Box<dyn std::error::Error>> {
+pub fn run_periodic_thread(args: PeriodicThreadData) -> anyhow::Result<MyProcess> {
     use std::process::*;
 
     let cmd = local_executable_cmd("/bin", "periodic_thread")?;
 
     if args.tasks.len() == 0 {
-        Err(format!("Attempted executing periodic_thread with no tasks"))?;
+        anyhow::bail!("Attempted executing periodic_thread with no tasks");
     }
 
     // assert tasks are ordered by period (ascending)
-    if !RTUtils::is_taskset_sorted_by_period(&args.tasks) {
-        Err(format!("Taskset for periodic_thread must be sorted by period."))?;
+    if !eva_rt_common::utils::RTUtils::is_taskset_sorted_by_period(&args.tasks) {
+        anyhow::bail!("Taskset for periodic_thread must be sorted by period.");
     }
 
     let mut num_tasks = 0;
@@ -210,7 +209,7 @@ pub fn run_periodic_thread(args: PeriodicThreadData) -> Result<MyProcess, Box<dy
     let cmd_str: Vec<_> = cmd_str.trim_ascii().split_ascii_whitespace().collect();
 
     let out_file = std::fs::OpenOptions::new().write(true).create(true).open(&args.out_file)
-        .map_err(|err| format!("OutFile creation error {}: {err}", &args.out_file))?;
+        .map_err(|err| anyhow::format_err!("OutFile creation error {}: {err}", &args.out_file))?;
 
     let proc = Command::new(cmd)
         .args(cmd_str)
@@ -218,7 +217,7 @@ pub fn run_periodic_thread(args: PeriodicThreadData) -> Result<MyProcess, Box<dy
         .stdout(out_file)
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|err| format!("Error in starting periodic thread: {err}"))?;
+        .map_err(|err| anyhow::format_err!("Error in starting periodic thread: {err}"))?;
 
     Ok(MyProcess { process: proc })
 }

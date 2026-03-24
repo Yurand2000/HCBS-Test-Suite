@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::RngExt as _;
 use eva_rt_engine::prelude::*;
 use eva_rt_engine::algorithms::full_preemption::global_multiprocessor::hierarchical::mpr_model09::*;
 use hcbs_test_suite::prelude::*;

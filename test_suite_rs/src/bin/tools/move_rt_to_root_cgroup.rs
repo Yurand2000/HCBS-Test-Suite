@@ -1,8 +1,10 @@
 use hcbs_test_suite::utils::is_batch_test;
 
-pub fn main() -> Result<(), Box<dyn std::error::Error>> {
+pub fn main() -> anyhow::Result<()> {
+    use hcbs_utils::prelude::*;
+
     // check if cgroup filesystem is mounted
-    if !hcbs_test_suite::cgroup::__cgroup_exists(".") {
+    if !cgroup_exists(".") {
         return Ok(());
     }
 
@@ -11,7 +13,7 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
     for (pid, _) in system.processes() {
         use hcbs_test_suite::prelude::SchedPolicy::*;
 
-        match hcbs_test_suite::prelude::get_scheduler(pid.as_u32()) {
+        match get_sched_policy(pid.as_u32()) {
             Ok(OTHER {..}) | Ok(BATCH {..}) | Ok(IDLE) => { continue; },
             Ok(_) => (),
             Err(err) => {
@@ -20,10 +22,10 @@ pub fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         };
 
-        let cgroup = hcbs_test_suite::prelude::get_cgroup_of_pid(pid.as_u32())?;
+        let cgroup = get_pid_cgroup(pid.as_u32())?;
         if cgroup == "." { continue; };
 
-        hcbs_test_suite::prelude::migrate_task_to_cgroup(".", pid.as_u32())?;
+        assign_pid_to_cgroup(".", pid.as_u32())?;
         if !is_batch_test() {
             println!("Migrated task {} to root cgroup", pid.as_u32());
         }

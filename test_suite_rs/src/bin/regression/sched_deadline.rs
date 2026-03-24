@@ -19,12 +19,12 @@ pub struct MyArgs {
     pub max_time: Option<u64>
 }
 
-pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<()> {
     if is_batch_test() && args.max_time.is_none() {
-        Err(format!("Batch testing requires a maximum running time"))?;
+        anyhow::bail!("Batch testing requires a maximum running time");
     }
 
-    let cpus = num_cpus::get();
+    let cpus = CpuSet::all()?.num_cpus();
     let cgroup_expected_bw = cpus as f64 * args.runtime_ms as f64 / args.period_ms as f64;
     let deadline_expected_bw = cpus as f64 * 4.0 / 10.0;
     let cgroup_error = cgroup_expected_bw * 0.025; // 2.5% error
@@ -42,11 +42,11 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Bo
     let result = main(args, ctrlc_flag)
         .and_then(|(deadline_bw, cgroup_bw)| {
             if f64::abs(cgroup_bw - cgroup_expected_bw) >= cgroup_error {
-                return Err(format!("Expected cgroup tasks to use {:.2} units of total runtime, but used {:.2} units", cgroup_expected_bw, cgroup_bw).into());
+                anyhow::bail!("Expected cgroup tasks to use {:.2} units of total runtime, but used {:.2} units", cgroup_expected_bw, cgroup_bw);
             }
 
             if f64::abs(deadline_bw - deadline_expected_bw) >= deadline_error {
-                return Err(format!("Expected SCHED_DEADLINE tasks to use {:.2} units of total runtime, but used {:.2} units", deadline_expected_bw, deadline_bw).into());
+                anyhow::bail!("Expected SCHED_DEADLINE tasks to use {:.2} units of total runtime, but used {:.2} units", deadline_expected_bw, deadline_bw);
             }
 
             Ok(format!("Cgroup processes got {:.2} units of total runtime, while SCHED_DEADLINE processes got {:.2} units of total runtime ", cgroup_bw, deadline_bw))
@@ -59,33 +59,33 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Bo
     }
 }
 
-pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(f64, f64), Box<dyn std::error::Error>> {
+pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, f64)> {
     let rt_cgroup_runtime_orig = reduce_cgroups_runtime()?;
 
-    let cpus = num_cpus::get();
+    let cpus = CpuSet::all()?.num_cpus();
     let cgroup = MyCgroup::new(&args.cgroup, args.runtime_ms * 1000, args.period_ms * 1000, false)?;
     let dl_runtime_ms = args.period_ms * 4 / 10;
 
-    migrate_task_to_cgroup(".", std::process::id())?;
+    assign_pid_to_cgroup(".", std::process::id())?;
     let dl_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
     let cgroup_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
 
-    set_scheduler(std::process::id(), SchedPolicy::RR(99))?;
+    set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
     cgroup_processes.iter().enumerate()
-        .try_for_each(|(cpu, proc)| {
-            migrate_task_to_cgroup(&args.cgroup, proc.id())?;
+        .try_for_each(|(cpu, proc)| -> anyhow::Result<()> {
+            assign_pid_to_cgroup(&args.cgroup, proc.id())?;
             set_cpuset_to_pid(proc.id(), &CpuSet::single(cpu as u32)?)?;
-            set_scheduler(proc.id(), SchedPolicy::RR(50))
-                .map_err(|err| Into::<Box<dyn std::error::Error>>::into(err))
+            set_sched_policy(proc.id(), SchedPolicy::RR(50))
+                .map_err(|err| err.into())
         })?;
 
     dl_processes.iter()
-        .try_for_each(|proc| {
-            set_scheduler(proc.id(), SchedPolicy::DEADLINE {
+        .try_for_each(|proc| -> anyhow::Result<()> {
+            set_sched_policy(proc.id(), SchedPolicy::DEADLINE {
                 runtime_ms: dl_runtime_ms,
                 deadline_ms: args.period_ms,
                 period_ms: args.period_ms,
-            }).map_err(|err| Into::<Box<dyn std::error::Error>>::into(err))
+            }).map_err(|err| err.into())
         })?;
 
     wait_loop(args.max_time, ctrlc_flag)?;
@@ -113,19 +113,15 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(f64, f64), Bo
     Ok((deadline_total_usage, cgroup_total_usage))
 }
 
-fn reduce_cgroups_runtime() -> Result<u64, Box<dyn std::error::Error>> {
-    use hcbs_test_suite::cgroup::*;
-
+fn reduce_cgroups_runtime() -> anyhow::Result<u64> {
     let rt_runtime = get_cgroup_runtime_us(".")?;
     let rt_period = get_cgroup_period_us(".")?;
-    __set_cgroup_runtime_us(".", rt_period * 5 / 10)?;
+    set_cgroup_runtime_us(".", rt_period * 5 / 10)?;
     Ok(rt_runtime)
 }
 
-fn restore_cgroups_runtime(rt_runtime_us: u64) -> Result<(), Box<dyn std::error::Error>> {
-    use hcbs_test_suite::cgroup::*;
-
+fn restore_cgroups_runtime(rt_runtime_us: u64) -> anyhow::Result<()> {
     std::thread::sleep(std::time::Duration::from_millis(100));
 
-    __set_cgroup_runtime_us(".", rt_runtime_us)
+    set_cgroup_runtime_us(".", rt_runtime_us)
 }

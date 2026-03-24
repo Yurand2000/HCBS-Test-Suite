@@ -7,7 +7,7 @@ pub struct MyArgs {
     bw_ms: u64,
 }
 
-pub fn set_fair_server_runtime_us(runtime_us: u64) -> Result<(), Box<dyn std::error::Error>> {
+pub fn set_fair_server_runtime_us(runtime_us: u64) -> anyhow::Result<()> {
     let runtime_ns = runtime_us * 1000;
 
     for entry in std::fs::read_dir("/sys/kernel/debug/sched/fair_server")? {
@@ -15,18 +15,18 @@ pub fn set_fair_server_runtime_us(runtime_us: u64) -> Result<(), Box<dyn std::er
         if entry.is_dir() {
             let entry = entry.into_os_string().into_string().unwrap();
             std::fs::write(format!("{entry}/runtime"), format!("{runtime_ns}"))
-                .map_err(|err| format!("Error in writing runtime {runtime_ns} ns to {entry}/runtime: {err}"))?;
+                .map_err(|err| anyhow::format_err!("Error in writing runtime {runtime_ns} ns to {entry}/runtime: {err}"))?;
         }
     }
-    
+
     Ok(())
 }
 
-pub fn main(args: MyArgs) -> Result<(), Box<dyn std::error::Error>> {
+pub fn main(args: MyArgs) -> anyhow::Result<()> {
     mount_debug_fs()?;
-    
-    migrate_task_to_cgroup(".", std::process::id())?;
-    set_scheduler(std::process::id(), SchedPolicy::RR(99))?;
+
+    assign_pid_to_cgroup(".", std::process::id())?;
+    set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
 
     let target_runtime_us = args.bw_ms * 1000;
     let target_fair_server_us = 1000_000 - target_runtime_us;

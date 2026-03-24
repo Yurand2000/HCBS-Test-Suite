@@ -1,17 +1,18 @@
 use std::ops::{Deref, DerefMut};
-use eva_rt_engine::prelude::*;
+use crate::prelude::*;
 
 pub mod cgroup;
 pub mod process;
 pub mod utils;
-pub mod cpuset;
 pub mod tests;
 
 pub mod prelude {
+    pub use hcbs_utils::prelude::*;
+    pub use eva_rt_common::prelude::RTTask;
+
     pub use super::cgroup::prelude::*;
     pub use super::process::prelude::*;
     pub use super::utils::prelude::*;
-    pub use super::cpuset::prelude::*;
 
     pub use super::{
         NamedTaskset,
@@ -61,7 +62,7 @@ impl DerefMut for MyProcess {
     }
 }
 
-pub fn cpu_hog() -> Result<MyProcess, Box<dyn std::error::Error>> {
+pub fn cpu_hog() -> anyhow::Result<MyProcess> {
     use std::process::*;
 
     let cmd = local_executable_cmd("/root/test_suite", "tools")?;
@@ -88,13 +89,13 @@ pub fn run_yes() -> Result<MyProcess, std::io::Error> {
     Ok(MyProcess { process: proc })
 }
 
-pub fn local_executable_cmd(def_dir: &str, name: &str) -> Result<String, Box<dyn std::error::Error>> {
+pub fn local_executable_cmd(def_dir: &str, name: &str) -> anyhow::Result<String> {
     let cmd = std::env::var("TESTBINDIR").unwrap_or_else(|_| def_dir.to_owned()) + "/" + name;
 
     if !std::fs::exists(&cmd)
-        .map_err(|err| format!("Error in checking existance of {cmd}: {err}"))?
+        .map_err(|err| anyhow::format_err!("Error in checking existance of {cmd}: {err}"))?
     {
-        Err(format!("Cannot find {name} executable at {cmd}"))?;
+        anyhow::bail!("Cannot find {name} executable at {cmd}");
     }
 
     Ok(cmd)

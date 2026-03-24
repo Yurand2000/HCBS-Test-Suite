@@ -16,7 +16,7 @@ pub enum Command {
     ManyTasks(many_tasks::MyArgs),
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> anyhow::Result<()> {
     let args = <Command as clap::Parser>::parse();
 
     use Command::*;

@@ -36,7 +36,7 @@ enum Runner {
     RtApp,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> anyhow::Result<()> {
     let args = <Args as clap::Parser>::parse();
 
     let main_run_taskset_array =

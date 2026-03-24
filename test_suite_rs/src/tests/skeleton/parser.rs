@@ -4,7 +4,6 @@ use nom::bytes::complete::*;
 use nom::character::complete::*;
 use nom::combinator::*;
 
-use eva_rt_engine::prelude::*;
 use crate::prelude::*;
 use crate::tests::prelude::*;
 
@@ -19,12 +18,12 @@ pub mod prelude {
     };
 }
 
-pub fn read_all_file(file: &str) -> Result<String, Box<dyn std::error::Error>> {
+pub fn read_all_file(file: &str) -> anyhow::Result<String> {
     std::fs::read_to_string(file)
-        .map_err(|err| format!("Error on reading file {file}, reason {err}").into())
+        .map_err(|err| anyhow::format_err!("Error on reading file {file}, reason {err}"))
 }
 
-pub fn parse_taskset(data: &str) -> Result<NamedTaskset, Box<dyn std::error::Error>> {
+pub fn parse_taskset(data: &str) -> anyhow::Result<NamedTaskset> {
     let u64_parser = || map_res(digit1::<&str, ()>, |num: &str| num.parse::<u64>());
     let name_parser = || map(take_while1(|ch: char| !ch.is_whitespace()), |name: &str| name.to_owned());
     let line_parser = map(
@@ -44,12 +43,12 @@ pub fn parse_taskset(data: &str) -> Result<NamedTaskset, Box<dyn std::error::Err
 
     parser.parse(&data)
         .map(|(_, taskset)| taskset)
-        .map_err(|err| format!("Taskset parser error: {err}").into())
+        .map_err(|err| anyhow::format_err!("Taskset parser error: {err}"))
 }
 
-pub fn serialize_taskset(taskset: &NamedTaskset) -> Result<String, Box<dyn std::error::Error>> {
+pub fn serialize_taskset(taskset: &NamedTaskset) -> anyhow::Result<String> {
     if taskset.name.chars().any(|ch| ch.is_whitespace()) {
-        return Err(format!("Taskset \'{}\' contains whitespaces in the name, cannot serialize.", taskset.name).into());
+        anyhow::bail!("Taskset \'{}\' contains whitespaces in the name, cannot serialize.", taskset.name);
     }
 
     let mut out_string = format!("Taskset {}\n", taskset.name);
@@ -61,7 +60,7 @@ pub fn serialize_taskset(taskset: &NamedTaskset) -> Result<String, Box<dyn std::
     Ok(out_string)
 }
 
-pub fn parse_config(data: &str) -> Result<NamedConfig, Box<dyn std::error::Error>> {
+pub fn parse_config(data: &str) -> anyhow::Result<NamedConfig> {
     let u64_parser = || map_res(digit1::<&str, ()>, |num: &str| num.parse::<u64>());
     let name_parser = || map(take_while1(|ch: char| !ch.is_whitespace()), |name: &str| name.to_owned());
     let mut parser = map(
@@ -77,18 +76,18 @@ pub fn parse_config(data: &str) -> Result<NamedConfig, Box<dyn std::error::Error
 
     parser.parse(&data)
         .map(|(_, config)| config)
-        .map_err(|err| format!("Taskset config parser error: {err}").into())
+        .map_err(|err| anyhow::format_err!("Taskset config parser error: {err}"))
 }
 
-pub fn serialize_config(config: &NamedConfig) -> Result<String, Box<dyn std::error::Error>> {
+pub fn serialize_config(config: &NamedConfig) -> anyhow::Result<String> {
     if config.name.chars().any(|ch| ch.is_whitespace()) {
-        Err(format!("Config \'{}\' contains whitespaces in the name, cannot serialize.", config.name).into())
+        anyhow::bail!("Config \'{}\' contains whitespaces in the name, cannot serialize.", config.name)
     } else {
         Ok(format!("Config {} {} {:.0} {:.0}", config.name, config.cpus, config.runtime.as_millis(), config.period.as_millis()))
     }
 }
 
-pub fn parse_result(data: &str) -> Result<Vec<TasksetRunResultInstance>, Box<dyn std::error::Error>> {
+pub fn parse_result(data: &str) -> anyhow::Result<Vec<TasksetRunResultInstance>> {
     let base_parser = (
         tag("Results"), space0, newline, space0,
         tag("Task"), space1, tag("Job"), space1, tag("AbsActivation_us"),
@@ -115,10 +114,10 @@ pub fn parse_result(data: &str) -> Result<Vec<TasksetRunResultInstance>, Box<dyn
 
     parser.parse(&data)
         .map(|(_, jobs)| jobs)
-        .map_err(|err| format!("Taskset run result parser error: {err}").into())
+        .map_err(|err| anyhow::format_err!("Taskset run result parser error: {err}").into())
 }
 
-pub fn serialize_result(taskset: &NamedTaskset, results: &Vec<TasksetRunResultInstance>) -> Result<String, Box<dyn std::error::Error>> {
+pub fn serialize_result(taskset: &NamedTaskset, results: &Vec<TasksetRunResultInstance>) -> anyhow::Result<String> {
     let mut out_string = format!("Results\nTask Job AbsActivation_us RelStart_us RelFinish_us Slack_us\n");
 
     results.iter()

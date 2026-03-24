@@ -1,3 +1,5 @@
+use rand::RngExt as _;
+
 pub fn uunifast(num_tasks: usize, utilization: f64, rng_seed: u64) -> Vec<f64>
 {
     let mut out_vec = Vec::with_capacity(num_tasks);
@@ -6,7 +8,7 @@ pub fn uunifast(num_tasks: usize, utilization: f64, rng_seed: u64) -> Vec<f64>
     let mut sum_u = utilization;
     for i in 0 .. (num_tasks - 1) {
         let next_sum_u = sum_u * f64::powf(
-                rand::Rng::random_range(&mut rng, 0.0 ..= 1.0),
+                rng.random_range(0.0 ..= 1.0),
                 1.0 / (num_tasks - i) as f64
             );
         out_vec.push(sum_u - next_sum_u);

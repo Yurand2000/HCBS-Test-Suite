@@ -10,7 +10,6 @@ pub mod prelude {
         wait_loop_periodic_fn,
         create_ctrlc_handler,
         ExitFlag,
-        mount_debug_fs,
         batch_test_header,
         batch_test_result,
         batch_test_result_details,
@@ -68,14 +67,14 @@ impl ExitFlag {
     }
 }
 
-pub fn create_ctrlc_handler() -> Result<ExitFlag, Box<dyn std::error::Error>> {
+pub fn create_ctrlc_handler() -> anyhow::Result<ExitFlag> {
     let (send, recv) = crossbeam::channel::bounded(1);
 
     ctrlc::set_handler(move || { send.send(()).unwrap(); })?;
     Ok(ExitFlag { ch: recv })
 }
 
-pub fn wait_loop(max_time: Option<u64>, ctrlc_flag: Option<ExitFlag>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn wait_loop(max_time: Option<u64>, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<()> {
     let exit = match ctrlc_flag {
         Some(exit) => exit,
         None => create_ctrlc_handler()?,
@@ -95,8 +94,8 @@ pub fn wait_loop(max_time: Option<u64>, ctrlc_flag: Option<ExitFlag>) -> Result<
     Ok(())
 }
 
-pub fn wait_loop_periodic_fn<F>(period_secs: f32, max_time: Option<u64>, ctrlc_flag: Option<ExitFlag>, mut fun: F) -> Result<(), Box<dyn std::error::Error>>
-    where F: FnMut() -> Result<(), Box<dyn std::error::Error>>
+pub fn wait_loop_periodic_fn<F>(period_secs: f32, max_time: Option<u64>, ctrlc_flag: Option<ExitFlag>, mut fun: F) -> anyhow::Result<()>
+    where F: FnMut() -> anyhow::Result<()>
 {
     let exit = match ctrlc_flag {
         Some(exit) => exit,
@@ -122,31 +121,14 @@ pub fn wait_loop_periodic_fn<F>(period_secs: f32, max_time: Option<u64>, ctrlc_f
     Ok(())
 }
 
-pub fn __shell(cmd: &str) -> Result<std::process::Output, Box<dyn std::error::Error>> {
+pub fn __shell(cmd: &str) -> anyhow::Result<std::process::Output> {
     use std::process::Command;
 
     Command::new("sh")
         .arg("-c")
         .arg(cmd)
         .output()
-        .map_err(|err| format!("Error in executing \"sh -c {cmd}\": {err}").into())
-}
-
-// mount -t debugfs none /sys/kernel/debug
-pub fn mount_debug_fs() -> Result<(), Box<dyn std::error::Error>> {
-    if __shell(&format!("mount | grep debugfs"))?.stdout.len() > 0 {
-        __println_debug(|| format!("DebugFS already mounted"));
-        return Ok(());
-    }
-
-    if !__shell(&format!("mount -t debugfs none /sys/kernel/debug"))?.status.success() {
-        __println_debug(|| format!("Error in mounting DebugFS"));
-        return Err(format!("Error in mounting DebugFS"))?;
-    }
-
-    __println_debug(|| format!("Mounted DebugFS"));
-
-    Ok(())
+        .map_err(|err| anyhow::format_err!("Error in executing \"sh -c {cmd}\": {err}"))
 }
 
 pub fn batch_test_success() {
@@ -192,7 +174,7 @@ pub fn batch_test_header(test_name: &str, test_category: &str) {
     std::io::stdout().flush().unwrap();
 }
 
-pub fn batch_test_result<T>(result: Result<T, Box<dyn std::error::Error>>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn batch_test_result<T>(result: anyhow::Result<T>) -> anyhow::Result<()> {
     match &result {
         Ok(_) => batch_test_success(),
         Err(err) => batch_test_failure(err),
@@ -205,7 +187,7 @@ pub fn batch_test_result<T>(result: Result<T, Box<dyn std::error::Error>>) -> Re
     }
 }
 
-pub fn batch_test_result_skippable<T>(result: Result<Skippable<T, Box<dyn std::error::Error>>, Box<dyn std::error::Error>>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn batch_test_result_skippable<T>(result: anyhow::Result<Skippable<T>>) -> anyhow::Result<()> {
     match &result {
         Ok(Skippable::Result(_)) => batch_test_success(),
         Ok(Skippable::Skipped(err)) => batch_test_skipped(err),
@@ -219,7 +201,7 @@ pub fn batch_test_result_skippable<T>(result: Result<Skippable<T, Box<dyn std::e
     }
 }
 
-pub fn batch_test_result_details<T: std::fmt::Display>(result: Result<T, Box<dyn std::error::Error>>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn batch_test_result_details<T: std::fmt::Display>(result: anyhow::Result<T>) -> anyhow::Result<()> {
     match &result {
         Ok(msg) => batch_test_success_details(msg),
         Err(err) => batch_test_failure(err),
@@ -232,7 +214,7 @@ pub fn batch_test_result_details<T: std::fmt::Display>(result: Result<T, Box<dyn
     }
 }
 
-pub fn batch_test_result_skippable_details<T: std::fmt::Display>(result: Result<Skippable<T, Box<dyn std::error::Error>>, Box<dyn std::error::Error>>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn batch_test_result_skippable_details<T: std::fmt::Display>(result: anyhow::Result<Skippable<T>>) -> anyhow::Result<()> {
     match &result {
         Ok(Skippable::Result(msg)) => batch_test_success_details(msg),
         Ok(Skippable::Skipped(err)) => batch_test_skipped(err),
@@ -246,7 +228,7 @@ pub fn batch_test_result_skippable_details<T: std::fmt::Display>(result: Result<
     }
 }
 
-pub fn get_fair_server_avg_bw() -> Result<f64, Box<dyn std::error::Error>> {
+pub fn get_fair_server_avg_bw() -> anyhow::Result<f64> {
     let mut avg_bw = 0f64;
     let mut num_cpus = 0f64;
 
@@ -257,15 +239,15 @@ pub fn get_fair_server_avg_bw() -> Result<f64, Box<dyn std::error::Error>> {
 
             let runtime: u64 =
                 std::fs::read_to_string(format!("{entry}/runtime"))
-                    .map_err(|err| format!("Error in reading {entry}/runtime: {err}"))
+                    .map_err(|err| anyhow::format_err!("Error in reading {entry}/runtime: {err}"))
                     .and_then(|value| value.trim().parse::<u64>()
-                        .map_err(|err| format!("Error in parsing {entry}/runtime: {err}"))
+                        .map_err(|err| anyhow::format_err!("Error in parsing {entry}/runtime: {err}"))
                     )?;
             let period: u64 =
                 std::fs::read_to_string(format!("{entry}/period"))
-                    .map_err(|err| format!("Error in reading {entry}/period: {err}"))
+                    .map_err(|err| anyhow::format_err!("Error in reading {entry}/period: {err}"))
                     .and_then(|value| value.trim().parse::<u64>()
-                        .map_err(|err| format!("Error in parsing {entry}/period: {err}"))
+                        .map_err(|err| anyhow::format_err!("Error in parsing {entry}/period: {err}"))
                     )?;
 
             avg_bw += runtime as f64 / period as f64;
@@ -276,7 +258,7 @@ pub fn get_fair_server_avg_bw() -> Result<f64, Box<dyn std::error::Error>> {
     Ok(avg_bw / num_cpus)
 }
 
-pub enum Skippable<T, E> {
+pub enum Skippable<T, E = anyhow::Error> {
     Result(T),
     Skipped(E)
 }

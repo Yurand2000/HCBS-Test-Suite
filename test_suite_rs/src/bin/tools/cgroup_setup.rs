@@ -20,8 +20,8 @@ pub struct Bandwidth {
     pub period_ms: Option<u64>,
 }
 
-pub fn main(args: MyArgs) -> Result<(), Box<dyn std::error::Error>> {
-    use hcbs_test_suite::cgroup::*;
+pub fn main(args: MyArgs) -> anyhow::Result<()> {
+    use hcbs_utils::prelude::*;
 
     mount_cgroup_fs()?;
 
@@ -35,5 +35,10 @@ pub fn main(args: MyArgs) -> Result<(), Box<dyn std::error::Error>> {
         None => get_cgroup_period_us(&args.cgroup)?,
     };
 
-    cgroup_setup(&args.cgroup, runtime_us, period_us)
+    create_cgroup(&args.cgroup)?;
+    set_cgroup_runtime_us(&args.cgroup, 0)?;
+    set_cgroup_period_us(&args.cgroup, period_us)?;
+    set_cgroup_runtime_us(&args.cgroup, runtime_us)?;
+
+    Ok(())
 }

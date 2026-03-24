@@ -1,6 +1,5 @@
 use crate::prelude::*;
 use crate::tests::prelude::*;
-use eva_rt_engine::prelude::*;
 
 pub mod prelude {
     pub use super::{
@@ -8,14 +7,14 @@ pub mod prelude {
     };
 }
 
-pub fn parse_taskset_results(taskset: &NamedTaskset, log_dir: &str) -> Result<Vec<TasksetRunResultInstance>, Box<dyn std::error::Error>> {
+pub fn parse_taskset_results(taskset: &NamedTaskset, log_dir: &str) -> anyhow::Result<Vec<TasksetRunResultInstance>> {
     Ok(
         taskset.tasks.iter().enumerate()
         .map(|(i, _)| {
             let log_name = format!("{}/rt-app-task{:02}-{}.log", log_dir, i, i);
 
             if !std::path::Path::new(&log_name).exists() {
-                return Err(format!("").into());
+                anyhow::bail!("Log file {log_name} does not exist");
             }
 
             parse_task_result(&log_name)
@@ -27,7 +26,7 @@ pub fn parse_taskset_results(taskset: &NamedTaskset, log_dir: &str) -> Result<Ve
     )
 }
 
-fn parse_task_result(run_file: &str) -> Result<Vec<TasksetRunResultInstance>, Box<dyn std::error::Error>> {
+fn parse_task_result(run_file: &str) -> anyhow::Result<Vec<TasksetRunResultInstance>> {
     use nom::Parser;
     use nom::multi::*;
     use nom::bytes::complete::*;
@@ -72,5 +71,5 @@ fn parse_task_result(run_file: &str) -> Result<Vec<TasksetRunResultInstance>, Bo
                 .for_each(|(i, task)| task.instance = i as u64);
             jobs
         })
-        .map_err(|err| format!("Taskset run result parser error: {err}").into())
+        .map_err(|err| anyhow::format_err!("Taskset run result parser error: {err}"))
 }

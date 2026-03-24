@@ -27,9 +27,9 @@ pub struct MyArgs {
     pub max_time: Option<u64>,
 }
 
-pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Box<dyn std::error::Error>> {
+pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<()> {
     if is_batch_test() && args.max_time.is_none() {
-        Err(format!("Batch testing requires a maximum running time"))?;
+        anyhow::bail!("Batch testing requires a maximum running time");
     }
 
     let single_bw = args.runtime_ms as f64 / args.period_ms as f64;
@@ -58,7 +58,7 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Bo
                     if f64::abs(used_bw - max_expected_bw) < max_error {
                         Ok(Skippable::Result(format!("Processes used an average of {used_bw:.5} units of CPU bandwidth.")))
                     } else {
-                        Err(format!("Expected cgroup's task to use {:.2} units of runtime, but used {:.2}", max_expected_bw, used_bw).into())
+                        Err(anyhow::format_err!("Expected cgroup's task to use {:.2} units of runtime, but used {:.2}", max_expected_bw, used_bw))
                     },
                 Skippable::Skipped(err) => Ok(Skippable::Skipped(err)),
             }
@@ -71,10 +71,10 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<(), Bo
     }
 }
 
-pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<Skippable<f64, Box<dyn std::error::Error>>, Box<dyn std::error::Error>> {
+pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippable<f64>> {
     // check if the cpu_set is valid
     let cpu_set = args.cpu_set
-        .map(|cpu_set| Into::<Result<CpuSet, CpuSetBuildError>>::into(cpu_set))
+        .map(|cpu_set| cpu_set.try_into())
         .transpose();
 
     let cpu_set =
@@ -89,34 +89,34 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> Result<Skippable<f64,
     // run the tasks
     let cgroup = MyCgroup::new(&args.cgroup, args.runtime_ms * 1000, args.period_ms * 1000, true)?;
 
-    migrate_task_to_cgroup(&args.cgroup, std::process::id())?;
+    assign_pid_to_cgroup(&args.cgroup, std::process::id())?;
 
     let procs = (0..args.num_tasks)
         .map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
 
-    set_scheduler(std::process::id(), SchedPolicy::RR(99))?;
+    set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
     procs.iter()
-        .try_for_each(|proc| {
-            migrate_task_to_cgroup(&args.cgroup, proc.id())?;
-            set_scheduler(proc.id(), SchedPolicy::RR(50))?;
+        .try_for_each(|proc| -> anyhow::Result<()> {
+            assign_pid_to_cgroup(&args.cgroup, proc.id())?;
+            set_sched_policy(proc.id(), SchedPolicy::RR(50))?;
             if cpu_set.is_some() {
                 set_cpuset_to_pid(proc.id(), cpu_set.as_ref().unwrap())?;
             }
 
-            Ok::<_, Box<dyn std::error::Error>>(())
+            Ok(())
         })?;
 
     wait_loop(args.max_time, ctrlc_flag)?;
 
     let total_usage =
         procs.iter()
-            .try_fold(0f64, |sum, proc| Ok::<f64, String>(sum + get_process_total_cpu_usage(proc.id())?))?;
+            .try_fold(0f64, |sum, proc| Ok::<f64, anyhow::Error>(sum + get_process_total_cpu_usage(proc.id())?))?;
 
     procs.into_iter()
         .try_for_each(|mut proc| proc.kill())?;
 
-    set_scheduler(std::process::id(), SchedPolicy::other())?;
-    migrate_task_to_cgroup(".", std::process::id())?;
+    set_sched_policy(std::process::id(), SchedPolicy::other())?;
+    assign_pid_to_cgroup(".", std::process::id())?;
     cgroup.destroy()?;
 
     Ok(Skippable::Result(total_usage))

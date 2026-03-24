@@ -11,10 +11,6 @@ pub enum Command {
     #[command(name = "hog", verbatim_doc_comment)]
     Hog,
 
-    /// Mount CGroup filesystem
-    #[command(name = "mount-cgroup-fs", verbatim_doc_comment)]
-    MountCgroupFS,
-
     /// Mount CGroup filesystem and CPU controller
     #[command(name = "mount-cgroup-cpu", verbatim_doc_comment)]
     MountCgroupCPU,
@@ -44,9 +40,9 @@ pub enum Command {
     ChrtDeadline(chrt::MyArgs),
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
+fn main() -> anyhow::Result<()> {
     let args = <Command as clap::Parser>::parse();
-    
+
     use Command::*;
 
     match args {
@@ -57,9 +53,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 core::ptr::write_volatile(&mut i, i_val + 1);
             } }
         }
-        MountCgroupCPU => hcbs_test_suite::cgroup::mount_cgroup_fs()?,
-        MountCgroupFS => hcbs_test_suite::cgroup::__mount_cgroup_fs()?,
-        MountDebugFS => hcbs_test_suite::utils::mount_debug_fs()?,
+        MountCgroupCPU => hcbs_utils::cgroup::mount_cgroup_fs()?,
+        MountDebugFS => hcbs_utils::debugfs::mount_debug_fs()?,
         RealtimeBwChange(args) => realtime_bw_change::main(args)?,
         MoveRtTasksToRootCgroup => move_rt_to_root_cgroup::main()?,
         CgroupBwChange(args) => cgroup_setup::main(args)?,
