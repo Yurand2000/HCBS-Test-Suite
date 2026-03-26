@@ -42,9 +42,15 @@ pub enum Command {
     /// CHRT process to SCHED_DEADLINE
     #[command(name = "chrt-deadline", verbatim_doc_comment)]
     ChrtDeadline(chrt::MyArgs),
+
+    /// CHRT process to SCHED_DEADLINE
+    #[command(name = "check-multicpu", verbatim_doc_comment)]
+    MultiCPUEnabled(()),
 }
 
 fn main() -> anyhow::Result<()> {
+    env_logger::init();
+
     let args = <Command as clap::Parser>::parse();
 
     use Command::*;
@@ -65,6 +71,13 @@ fn main() -> anyhow::Result<()> {
         CgroupBwChange(args) => cgroup_setup::main(args)?,
         HRTick(args) => hrtick::main(args)?,
         ChrtDeadline(args) => chrt::main(args)?,
+        MultiCPUEnabled(_) => {
+            if hcbs_test_suite::prelude::is_multicpu_enabled()? {
+                println!("Multi CPU available");
+            } else {
+                println!("Multi CPU NOT available");
+            }
+        }
     };
 
     Ok(())

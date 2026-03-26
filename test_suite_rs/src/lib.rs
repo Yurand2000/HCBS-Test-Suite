@@ -44,7 +44,7 @@ pub struct MyProcess {
 
 impl Drop for MyProcess {
     fn drop(&mut self) {
-        self.kill().unwrap()
+        let _ = self.kill();
     }
 }
 

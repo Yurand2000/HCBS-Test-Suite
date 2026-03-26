@@ -61,7 +61,8 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, f64)> {
     let cpus = CpuSet::all()?.num_cpus();
-    let cgroup = MyCgroup::new(&args.cgroup, args.runtime_ms * 1000, args.period_ms * 1000, false)?;
+    let cgroup = MyCgroup::new(&args.cgroup, false)?;
+    cgroup_setup(&args.cgroup, args.runtime_ms * 1000, args.period_ms * 1000)?;
 
     assign_pid_to_cgroup(".", std::process::id())?;
     let fifo_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;

@@ -37,8 +37,10 @@ pub enum Command {
 }
 
 fn main() -> anyhow::Result<()> {
+    env_logger::init();
+
     let args = <Command as clap::Parser>::parse();
-    hcbs_utils::cgroup::mount_cgroup_fs()?;
+    hcbs_utils::cgroup::mount_cgroup_cpu()?;
 
     use Command::*;
 

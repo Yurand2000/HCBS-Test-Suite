@@ -23,7 +23,7 @@ pub struct Bandwidth {
 pub fn main(args: MyArgs) -> anyhow::Result<()> {
     use hcbs_utils::prelude::*;
 
-    mount_cgroup_fs()?;
+    mount_cgroup_cpu()?;
 
     let runtime_us = match args.bw.runtime_ms {
         Some(ms) => ms * 1000,

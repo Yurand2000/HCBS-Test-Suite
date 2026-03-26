@@ -43,7 +43,8 @@ pub fn main(args: MyArgs, rng: Option<&mut dyn rand::Rng>, ctrlc_flag: Option<Ex
     wait_loop_periodic_fn(0f32, args.max_time, ctrlc_flag,
         || {
             let runtime_ms = rng.random_range(args.runtime_min_ms ..= args.runtime_max_ms);
-            let cgroup = MyCgroup::new(&args.cgroup, runtime_ms * 1000, args.period_ms * 1000, true)?;
+            let cgroup = MyCgroup::new(&args.cgroup, true)?;
+            cgroup_setup(&args.cgroup, runtime_ms * 1000, args.period_ms * 1000)?;
             assign_pid_to_cgroup(&args.cgroup, std::process::id())?;
             set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
 

@@ -46,11 +46,11 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>)
         config_file
     )?;
 
-    let cgroup = MyCgroup::new(
+    let cgroup = MyCgroup::new(&args.cgroup, true)?;
+    cgroup_setup(
         &args.cgroup,
         run.config.runtime.as_micros() as u64,
-        run.config.period.as_micros() as u64,
-        true
+        run.config.period.as_micros() as u64
     )?;
 
     assign_pid_to_cgroup(&args.cgroup, std::process::id())?;

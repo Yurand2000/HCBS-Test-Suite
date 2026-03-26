@@ -114,7 +114,7 @@ pub fn can_run_taskset(run: &TasksetRun, args: &RunnerArgsBase) -> bool {
 }
 
 pub fn check_root_cgroup(args: &RunnerArgsBase) -> anyhow::Result<()> {
-    mount_cgroup_fs()?;
+    mount_cgroup_cpu()?;
     let cgroup_period = get_cgroup_period_us(".")?;
     let cgroup_runtime = get_cgroup_runtime_us(".")?;
     let cgroup_bw = cgroup_runtime as f64 / cgroup_period as f64;

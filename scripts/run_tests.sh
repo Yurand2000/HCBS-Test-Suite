@@ -24,7 +24,7 @@ setup() {
         ./test_suite/tools move-to-root          &&
         ./test_suite/tools mount-cgroup-cpu      &&
         ./test_suite/tools mount-debug-fs        &&
-        ./test_suite/tools cgroup-setup -r 900
+        ./test_suite/tools cgroup-setup -r 850
     ) || exit 1
 }
 
@@ -33,29 +33,58 @@ constraints() {
     ./test_suite/constraints_cgroup_setup
 }
 
-time_tests() {
-    echo "* Time Tests *"
+time_tests_multi() {
+    echo "* Time Tests - Multi *"
     BATCH_TEST_CUSTOM_NAME="one-task-one-cpu" \
-        ./test_suite/time many -r 40 -p 100 --cpu-set 0 -t 10
+        ./test_suite/time multi -C 40/100/0 -t 10
     BATCH_TEST_CUSTOM_NAME="one-task-two-cpus" \
-        ./test_suite/time many -r 30 -p 100 --cpu-set 0-1 -t 10
+        ./test_suite/time multi -C 30/100/0-1 -t 10
     BATCH_TEST_CUSTOM_NAME="one-task-four-cpus" \
-        ./test_suite/time many -r 20 -p 100 --cpu-set 0-3 -t 10
+        ./test_suite/time multi -C 20/100/0-3 -t 10
     BATCH_TEST_CUSTOM_NAME="one-task-eight-cpus" \
-        ./test_suite/time many -r 10 -p 100 --cpu-set 0-7 -t 10
+        ./test_suite/time multi -C 10/100/0-7 -t 10
     BATCH_TEST_CUSTOM_NAME="one-task-all-cpus" \
-        ./test_suite/time many -r 5 -p 100 -t 10
+        ./test_suite/time uni -r 5 -p 100 -t 10
 
     BATCH_TEST_CUSTOM_NAME="five-tasks-one-cpu" \
-        ./test_suite/time many -n 5 -r 40 -p 100 --cpu-set 0 -t 10
+        ./test_suite/time multi -n 5 -C 40/100/0 -t 10
     BATCH_TEST_CUSTOM_NAME="five-tasks-two-cpus" \
-        ./test_suite/time many -n 5 -r 30 -p 100 --cpu-set 0-1 -t 10
+        ./test_suite/time multi -n 5 -C 30/100/0-1 -t 10
     BATCH_TEST_CUSTOM_NAME="five-tasks-four-cpus" \
-        ./test_suite/time many -n 5 -r 20 -p 100 --cpu-set 0-3 -t 10
+        ./test_suite/time multi -n 5 -C 20/100/0-3 -t 10
     BATCH_TEST_CUSTOM_NAME="five-tasks-eight-cpus" \
-        ./test_suite/time many -n 5 -r 10 -p 100 --cpu-set 0-7 -t 10
+        ./test_suite/time multi -n 5 -C 10/100/0-7 -t 10
     BATCH_TEST_CUSTOM_NAME="five-tasks-all-cpus" \
-        ./test_suite/time many -n 5 -r 5 -p 100 -t 10
+        ./test_suite/time uni -n 5 -r 5 -p 100 -t 10
+}
+
+time_tests_uni() {
+    echo "* Time Tests - Uni *"
+    BATCH_TEST_CUSTOM_NAME="one-task-one-cpu" \
+        ./test_suite/time uni -r 40 -p 100 --cpu-set 0 -t 10
+    BATCH_TEST_CUSTOM_NAME="one-task-two-cpus" \
+        ./test_suite/time uni -r 30 -p 100 --cpu-set 0-1 -t 10
+    BATCH_TEST_CUSTOM_NAME="one-task-four-cpus" \
+        ./test_suite/time uni -r 20 -p 100 --cpu-set 0-3 -t 10
+    BATCH_TEST_CUSTOM_NAME="one-task-eight-cpus" \
+        ./test_suite/time uni -r 10 -p 100 --cpu-set 0-7 -t 10
+    BATCH_TEST_CUSTOM_NAME="one-task-all-cpus" \
+        ./test_suite/time uni -r 5 -p 100 -t 10
+
+    BATCH_TEST_CUSTOM_NAME="five-tasks-one-cpu" \
+        ./test_suite/time uni -n 5 -r 40 -p 100 --cpu-set 0 -t 10
+    BATCH_TEST_CUSTOM_NAME="five-tasks-two-cpus" \
+        ./test_suite/time uni -n 5 -r 30 -p 100 --cpu-set 0-1 -t 10
+    BATCH_TEST_CUSTOM_NAME="five-tasks-four-cpus" \
+        ./test_suite/time uni -n 5 -r 20 -p 100 --cpu-set 0-3 -t 10
+    BATCH_TEST_CUSTOM_NAME="five-tasks-eight-cpus" \
+        ./test_suite/time uni -n 5 -r 10 -p 100 --cpu-set 0-7 -t 10
+    BATCH_TEST_CUSTOM_NAME="five-tasks-all-cpus" \
+        ./test_suite/time uni -n 5 -r 5 -p 100 -t 10
+}
+
+time_tests() {
+    time_tests_multi
 }
 
 regression() {

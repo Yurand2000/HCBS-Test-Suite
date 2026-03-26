@@ -63,7 +63,8 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
     let rt_cgroup_runtime_orig = reduce_cgroups_runtime()?;
 
     let cpus = CpuSet::all()?.num_cpus();
-    let cgroup = MyCgroup::new(&args.cgroup, args.runtime_ms * 1000, args.period_ms * 1000, false)?;
+    let cgroup = MyCgroup::new(&args.cgroup, false)?;
+    cgroup_setup(&args.cgroup, args.runtime_ms * 1000, args.period_ms * 1000)?;
     let dl_runtime_ms = args.period_ms * 4 / 10;
 
     assign_pid_to_cgroup(".", std::process::id())?;

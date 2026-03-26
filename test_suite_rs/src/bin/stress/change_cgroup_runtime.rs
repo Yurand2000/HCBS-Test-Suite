@@ -48,7 +48,8 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 }
 
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<()> {
-    let mut cgroup = MyCgroup::new(&args.cgroup, args.runtime1_ms * 1000, args.period_ms * 1000, true)?;
+    let cgroup = MyCgroup::new(&args.cgroup, true)?;
+    cgroup_setup(&args.cgroup, args.runtime1_ms * 1000, args.period_ms * 1000)?;
     assign_pid_to_cgroup(&args.cgroup, std::process::id())?;
     set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
 
@@ -62,7 +63,7 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<()> {
             state = args.runtime1_ms;
         }
 
-        cgroup.update_runtime(state)?;
+        set_cgroup_runtime_us(cgroup.name(), state)?;
         Ok(())
     };
 

@@ -1,4 +1,5 @@
-mod many_tasks;
+mod unicpu;
+mod multicpu;
 
 #[derive(clap::Parser, Debug)]
 #[command(about, long_about = None)]
@@ -12,17 +13,29 @@ pub enum Command {
     /// to the cgroup.
     ///
     /// Constraints: runtime <= period
-    #[command(name = "many", verbatim_doc_comment)]
-    ManyTasks(many_tasks::MyArgs),
+    #[command(name = "uni", verbatim_doc_comment)]
+    UniCpu(unicpu::MyArgs),
+
+    /// Run multiple yes tasks in a multi RT cgroup
+    ///
+    /// Similar to the "uni" command, but allows to specify runtime and period
+    /// for each server individually.
+    ///
+    /// Constraints: runtime <= period
+    #[command(name = "multi", verbatim_doc_comment)]
+    MultiCpu(multicpu::MyArgs),
 }
 
 fn main() -> anyhow::Result<()> {
+    env_logger::init();
+
     let args = <Command as clap::Parser>::parse();
 
     use Command::*;
 
     match args {
-        ManyTasks(args) => { many_tasks::batch_runner(args, None)?; },
+        UniCpu(args) => { unicpu::batch_runner(args, None)?; },
+        MultiCpu(args) => { multicpu::batch_runner(args, None)?; },
     };
 
     Ok(())

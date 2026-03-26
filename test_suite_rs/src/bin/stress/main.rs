@@ -77,6 +77,8 @@ pub enum Command {
 }
 
 fn main() -> anyhow::Result<()> {
+    env_logger::init();
+
     let args = <Command as clap::Parser>::parse();
 
     use Command::*;

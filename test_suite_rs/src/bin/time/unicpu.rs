@@ -40,7 +40,7 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
     let max_expected_bw = f64::min(total_cgroup_bw, args.num_tasks as f64);
     let max_error = 0.01;
 
-    let test_header = format!("time c{} n{} r{} p{} set{:?}",
+    let test_header = format!("time uni c{} n{} r{} p{} set{:?}",
         args.cgroup, args.num_tasks, args.runtime_ms, args.period_ms, args.cpu_set);
     let test_header =
         if is_batch_test() {
@@ -87,7 +87,8 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippa
         };
 
     // run the tasks
-    let cgroup = MyCgroup::new(&args.cgroup, args.runtime_ms * 1000, args.period_ms * 1000, true)?;
+    let cgroup = MyCgroup::new(&args.cgroup, true)?;
+    cgroup_setup(&args.cgroup, args.runtime_ms * 1000, args.period_ms * 1000)?;
 
     assign_pid_to_cgroup(&args.cgroup, 0)?;
 
