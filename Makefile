@@ -1,5 +1,12 @@
-BUILD?=build
-O?=install
+MAKEFILE_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+
+ifndef BUILD
+BUILD := $(MAKEFILE_DIR)/+build
+endif
+
+ifndef O
+O := $(MAKEFILE_DIR)/+install
+endif
 
 .PHONY: all initramfs install-tar build install
 all: build initramfs install-tar
@@ -15,35 +22,31 @@ install: build
 	mkdir -p $(O)
 	cp -ur $(BUILD)/mnt/root/* $(O)/
 
+# test software
+.PHONY: cgroup
+cgroup: $(BUILD)/cgroup.keep
+
+RUSTFLAGS="-C target-feature=+crt-static"
+$(BUILD)/cgroup.keep: $(BUILD)/mnt/.keep $(BUILD)/.keep
+	mkdir -p $(BUILD)/test_suite
+	RUSTFLAGS=$(RUSTFLAGS) \
+		cargo build --release --target x86_64-unknown-linux-gnu \
+		--target-dir "$(BUILD)/test_suite"
+
+	mkdir -p $(BUILD)/mnt/root/test_suite
+	find $(BUILD)/test_suite/x86_64-unknown-linux-gnu/release/ \
+		-maxdepth 1 -executable -type f | \
+		xargs -I{} cp -u "{}" $(BUILD)/mnt/root/test_suite/
+
 # tasksets
 .PHONY: tasksets
 tasksets: $(BUILD)/mnt/root/tasksets/.keep
 
 .PRECIOUS: $(BUILD)/mnt/root/tasksets/.keep
 $(BUILD)/mnt/root/tasksets/.keep: $(BUILD)/.keep
-	CARGO_HOME=$(CARGO_HOME) \
-		CARGO_TARGET_DIR=$(CARGO_TARGET_DIR) \
-		cargo run --bin taskset_gen --release -- -O $(BUILD)/mnt/root/tasksets
+	cargo run --bin taskset_gen --release \
+	--target-dir "$(BUILD)/test_suite" -- -O $(BUILD)/mnt/root/tasksets
 	touch $@
-
-# test software
-.PHONY: cgroup
-cgroup: $(BUILD)/cgroup.keep
-
-RUSTFLAGS="-C target-feature=+crt-static"
-CARGO_HOME="$(BUILD)/rust/cargo"
-CARGO_TARGET_DIR="$(BUILD)/rust/target"
-
-$(BUILD)/cgroup.keep: $(BUILD)/mnt/.keep $(BUILD)/.keep
-	rm -rf $(BUILD)/test_suite
-	mkdir -p $(BUILD)/test_suite
-	RUSTFLAGS=$(RUSTFLAGS) \
-		CARGO_HOME=$(CARGO_HOME) \
-		CARGO_TARGET_DIR=$(CARGO_TARGET_DIR) \
-		cargo install --path ./test_suite_rs --root $(BUILD)/test_suite \
-		--no-track --target x86_64-unknown-linux-gnu
-	mkdir -p $(BUILD)/mnt/root/test_suite
-	cp -r $(BUILD)/test_suite/bin/* $(BUILD)/mnt/root/test_suite/
 
 # extra scripts
 SCRIPTS = $(wildcard scripts/*)
@@ -99,13 +102,14 @@ $(BUILD)/rt-app/rt-app/.keep: $(BUILD)/.keep $(BUILD)/rt-app/json-c/.keep
 		export ac_cv_lib_json_c_json_object_from_file=yes; \
     	export ac_cv_lib_numa_numa_available=no; \
 		./autogen.sh; \
-    	./configure --host=aarch64-linux-gnu \
-			LDFLAGS="-L$(abspath $(BUILD))/rt-app/json-c" \
-			CFLAGS="-I$(abspath $(BUILD))/rt-app/"; \
+    	./configure --host=amd64-linux-gnu \
+			LDFLAGS="-L$(BUILD)/rt-app/json-c" \
+			CFLAGS="-I$(BUILD)/rt-app/"; \
     	AM_LDFLAGS="-all-static" make
 	touch $@
 
 $(BUILD)/mnt/root/bin/rt-app: $(BUILD)/rt-app/rt-app/.keep
+	mkdir -p $(@D)
 	cp $(BUILD)/rt-app/rt-app/src/rt-app $@
 
 # busybox (only for initramfs)
@@ -125,7 +129,8 @@ $(BUILD)/BuildCore/.keep: $(BUILD)/.keep
 
 $(BUILD)/initrd-busybox.gz: $(BUILD)/BuildCore/.keep
 	mkdir -p $(BUILD)/busybox
-	cd $(BUILD)/busybox && sh $(BUILD)/BuildCore/buildcore.sh $@
+	sh $(MAKEFILE_DIR)/utils/ubuntu.sh "sh ../BuildCore/buildcore.sh ./$(@F)"
+	cp -u $(BUILD)/busybox/bb_build-1.36.1/_install/initrd-busybox.gz $@
 
 ### compressed targets
 # initramfs
@@ -154,7 +159,3 @@ $(BUILD)/.keep:
 .PHONY: clean
 clean:
 	rm -rf $(BUILD)
-	cd test_suite_rs && \
-		CARGO_HOME='$(BUILD)/rust/cargo' \
-		CARGO_TARGET_DIR='$(BUILD)/rust/target' \
-		cargo clean
