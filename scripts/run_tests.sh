@@ -34,6 +34,10 @@ constraints() {
 }
 
 time_tests_multi() {
+    if !(./test_suite/tools check-multicpu > /dev/null); then
+        return
+    fi
+
     echo "* Time Tests - Multi *"
     BATCH_TEST_CUSTOM_NAME="one-task-one-cpu" \
         ./test_suite/time multi -C 40/100/0 -t 10
@@ -83,10 +87,6 @@ time_tests_uni() {
         ./test_suite/time uni -n 5 -r 5 -p 100 -t 10
 }
 
-time_tests() {
-    time_tests_multi
-}
-
 regression() {
     echo "* Known Regression Tests *"
     TESTBINDIR=test_suite ./test_suite/regression fair-server -t 60
@@ -133,7 +133,8 @@ elif [ $TEST_SUITE = "full" ]; then
     echo "*** Running all tests + excluded ones ***"
     setup
     constraints
-    time_tests
+    time_tests_uni
+    time_tests_multi
     regression
     random_stress
     tasksets_rt_app
@@ -144,7 +145,8 @@ elif [ $TEST_SUITE = "constraints" ]; then
     constraints
 elif [ $TEST_SUITE = "time" ]; then
     setup
-    time_tests
+    time_tests_uni
+    time_tests_multi
 elif [ $TEST_SUITE = "regression" ]; then
     setup
     regression

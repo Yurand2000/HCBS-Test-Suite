@@ -52,15 +52,17 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 }
 
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<()> {
-    let cgroup = MyCgroup::new(&args.cgroup, true)?;
-    cgroup_setup(&args.cgroup, args.runtime_ms * 1000, args.period_ms * 1000)?;
-    assign_pid_to_cgroup(&args.cgroup, std::process::id())?;
-    set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
+    let mut cgroup = HCBSCgroup::new(&args.cgroup)?
+        .with_force_kill(true);
+    cgroup.set_period_us(args.period_ms * 1000)?;
+    cgroup.set_runtime_us(args.runtime_ms * 1000)?;
 
-    let mut proc = run_yes()?;
+    cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?
+        .set_sched_policy(SchedPolicy::RR(99))?;
+
+    let proc = cgroup.assign_process(run_yes()?).map_err(|(_, err)| err)?;
     let mut state = &args.cpu_set1;
-    set_cpuset_to_pid(proc.id(), state)?;
-
+    proc.set_affinity(state.clone())?;
     let update_fn = || {
         if state == &args.cpu_set1 {
             state = &args.cpu_set2;
@@ -68,16 +70,11 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<()> {
             state = &args.cpu_set1;
         }
 
-        set_cpuset_to_pid(proc.id(), state)?;
+        proc.set_affinity(state.clone())?;
         Ok(())
     };
 
     wait_loop_periodic_fn(args.change_period, args.max_time, ctrlc_flag, update_fn)?;
-
-    proc.kill()?;
-    set_sched_policy(std::process::id(), SchedPolicy::other())?;
-    assign_pid_to_cgroup(".", std::process::id())?;
-    cgroup.destroy()?;
 
     Ok(())
 }

@@ -75,7 +75,6 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippa
     assert!(args.config.len() >= 1);
 
     // run the tasks
-    let cgroup = MyCgroup::new(&args.cgroup, true)?;
     let mut cgroup_runtimes_us: HashMap<u64, HashSet<CpuID>> = HashMap::new();
     let mut cgroup_periods_us: HashMap<u64, HashSet<CpuID>> = HashMap::new();
 
@@ -103,38 +102,29 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippa
         }
     }
 
-    cgroup_setup_multi(
-        &args.cgroup,
-        cgroup_runtimes_us.into_iter().map(|(time, cpus)| (time, cpus.into_iter())),
-        cgroup_periods_us.into_iter().map(|(time, cpus)| (time, cpus.into_iter())),
-    )?;
+    let mut cgroup = HCBSCgroup::new(&args.cgroup)?
+        .with_force_kill(true);
+    cgroup.set_period_us_multi(cgroup_periods_us)?;
+    cgroup.set_runtime_us_multi(cgroup_runtimes_us)?;
 
-    assign_pid_to_cgroup(&args.cgroup, 0)?;
+    cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?
+        .set_sched_policy(SchedPolicy::RR(99))?;
 
-    let procs = (0..args.num_tasks)
-        .map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
+    let procs =
+        (0..args.num_tasks)
+        .map(|_| -> anyhow::Result<Pid> {
+            let proc = cgroup.assign_process(run_yes()?).map_err(|(_, err)| err)?;
+            proc.set_sched_policy(SchedPolicy::RR(50))?;
 
-    set_sched_policy(0, SchedPolicy::RR(99))?;
-    procs.iter()
-        .try_for_each(|proc| -> anyhow::Result<()> {
-            assign_pid_to_cgroup(&args.cgroup, proc.id())?;
-            set_sched_policy(proc.id(), SchedPolicy::RR(50))?;
-
-            Ok(())
-        })?;
+            Ok(proc.id())
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
 
     wait_loop(args.max_time, ctrlc_flag)?;
 
     let total_usage =
-        procs.iter()
-            .try_fold(0f64, |sum, proc| Ok::<f64, anyhow::Error>(sum + get_process_total_cpu_usage(proc.id())?))?;
-
-    procs.into_iter()
-        .try_for_each(|mut proc| proc.kill())?;
-
-    set_sched_policy(0, SchedPolicy::other())?;
-    assign_pid_to_cgroup(".", 0)?;
-    cgroup.destroy()?;
+        procs.into_iter()
+            .try_fold(0f64, |sum, proc| Ok::<f64, anyhow::Error>(sum + get_process_total_cpu_usage(proc)?))?;
 
     Ok(Skippable::Result(total_usage))
 }

@@ -43,23 +43,19 @@ pub fn main(args: MyArgs, rng: Option<&mut dyn rand::Rng>, ctrlc_flag: Option<Ex
     wait_loop_periodic_fn(0f32, args.max_time, ctrlc_flag,
         || {
             let runtime_ms = rng.random_range(args.runtime_min_ms ..= args.runtime_max_ms);
-            let cgroup = MyCgroup::new(&args.cgroup, true)?;
-            cgroup_setup(&args.cgroup, runtime_ms * 1000, args.period_ms * 1000)?;
-            assign_pid_to_cgroup(&args.cgroup, std::process::id())?;
-            set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
+            let mut cgroup = HCBSCgroup::new(&args.cgroup)?
+                .with_force_kill(true);
+            cgroup.set_period_us(args.period_ms * 1000)?;
+            cgroup.set_runtime_us(runtime_ms * 1000)?;
+
+            cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?
+                .set_sched_policy(SchedPolicy::RR(99))?;
 
             let num_procs = rng.random_range(1..=5);
             let procs = (0..num_procs)
                 .map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
 
             thread::sleep(std::time::Duration::from_secs_f32(rng.random_range(0.5f32..=2f32)));
-
-            procs.into_iter()
-                .try_for_each(|mut proc| proc.kill())?;
-
-            set_sched_policy(std::process::id(), SchedPolicy::other())?;
-            assign_pid_to_cgroup(".", std::process::id())?;
-            cgroup.destroy()?;
 
             Ok(())
         }

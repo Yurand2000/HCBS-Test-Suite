@@ -61,8 +61,10 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, f64)> {
     let cpus = CpuSet::all()?.num_cpus();
-    let cgroup = MyCgroup::new(&args.cgroup, false)?;
-    cgroup_setup(&args.cgroup, args.runtime_ms * 1000, args.period_ms * 1000)?;
+    let mut cgroup = HCBSCgroup::new(&args.cgroup)?
+        .with_force_kill(false);
+    cgroup.set_period_us(args.period_ms * 1000)?;
+    cgroup.set_runtime_us(args.runtime_ms * 1000)?;
 
     assign_pid_to_cgroup(".", std::process::id())?;
     let fifo_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
@@ -70,17 +72,20 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
 
     set_sched_policy(std::process::id(), SchedPolicy::FIFO(99))?;
     cgroup_processes.iter().enumerate()
-        .try_for_each(|(cpu, proc)| {
+        .try_for_each(|(cpu, proc)| -> anyhow::Result<()> {
             assign_pid_to_cgroup(&args.cgroup, proc.id())?;
             set_cpuset_to_pid(proc.id(), &CpuSet::single(cpu as u32)?)?;
-            set_sched_policy(proc.id(), SchedPolicy::FIFO(50))
-                .map_err(|err| Into::<anyhow::Error>::into(err))
+            set_sched_policy(proc.id(), SchedPolicy::FIFO(50))?;
+
+            Ok(())
         })?;
 
     fifo_processes.iter().enumerate()
-        .try_for_each(|(cpu, proc)| {
+        .try_for_each(|(cpu, proc)| -> anyhow::Result<()> {
             set_sched_policy(proc.id(), SchedPolicy::FIFO(50))?;
-            set_cpuset_to_pid(proc.id(), &CpuSet::single(cpu as u32)?)
+            set_cpuset_to_pid(proc.id(), &CpuSet::single(cpu as u32)?)?;
+
+            Ok(())
         })?;
 
     wait_loop(args.max_time, ctrlc_flag)?;

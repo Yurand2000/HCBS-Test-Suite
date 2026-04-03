@@ -87,38 +87,32 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippa
         };
 
     // run the tasks
-    let cgroup = MyCgroup::new(&args.cgroup, true)?;
-    cgroup_setup(&args.cgroup, args.runtime_ms * 1000, args.period_ms * 1000)?;
+    let mut cgroup = HCBSCgroup::new(&args.cgroup)?
+        .with_force_kill(true);
+    cgroup.set_period_us(args.period_ms * 1000)?;
+    cgroup.set_runtime_us(args.runtime_ms * 1000)?;
 
-    assign_pid_to_cgroup(&args.cgroup, 0)?;
+    cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?
+        .set_sched_policy(SchedPolicy::RR(99))?;
 
-    let procs = (0..args.num_tasks)
-        .map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
-
-    set_sched_policy(0, SchedPolicy::RR(99))?;
-    procs.iter()
-        .try_for_each(|proc| -> anyhow::Result<()> {
-            assign_pid_to_cgroup(&args.cgroup, proc.id())?;
-            set_sched_policy(proc.id(), SchedPolicy::RR(50))?;
+    let procs =
+        (0..args.num_tasks)
+        .map(|_| -> anyhow::Result<Pid> {
+            let proc = cgroup.assign_process(run_yes()?).map_err(|(_, err)| err)?;
+            proc.set_sched_policy(SchedPolicy::RR(50))?;
             if cpu_set.is_some() {
-                set_cpuset_to_pid(proc.id(), cpu_set.as_ref().unwrap())?;
+                proc.set_affinity(cpu_set.clone().unwrap())?;
             }
 
-            Ok(())
-        })?;
+            Ok(proc.id())
+        })
+        .collect::<anyhow::Result<Vec<_>>>()?;
 
     wait_loop(args.max_time, ctrlc_flag)?;
 
     let total_usage =
-        procs.iter()
-            .try_fold(0f64, |sum, proc| Ok::<f64, anyhow::Error>(sum + get_process_total_cpu_usage(proc.id())?))?;
-
-    procs.into_iter()
-        .try_for_each(|mut proc| proc.kill())?;
-
-    set_sched_policy(0, SchedPolicy::other())?;
-    assign_pid_to_cgroup(".", 0)?;
-    cgroup.destroy()?;
+        procs.into_iter()
+            .try_fold(0f64, |sum, proc| Ok::<f64, anyhow::Error>(sum + get_process_total_cpu_usage(proc)?))?;
 
     Ok(Skippable::Result(total_usage))
 }

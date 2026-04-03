@@ -63,8 +63,10 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
     let rt_cgroup_runtime_orig = reduce_cgroups_runtime()?;
 
     let cpus = CpuSet::all()?.num_cpus();
-    let cgroup = MyCgroup::new(&args.cgroup, false)?;
-    cgroup_setup(&args.cgroup, args.runtime_ms * 1000, args.period_ms * 1000)?;
+    let mut cgroup = HCBSCgroup::new(&args.cgroup)?
+        .with_force_kill(false);
+    cgroup.set_period_us(args.period_ms * 1000)?;
+    cgroup.set_runtime_us(args.runtime_ms * 1000)?;
     let dl_runtime_ms = args.period_ms * 4 / 10;
 
     assign_pid_to_cgroup(".", std::process::id())?;
@@ -76,8 +78,9 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
         .try_for_each(|(cpu, proc)| -> anyhow::Result<()> {
             assign_pid_to_cgroup(&args.cgroup, proc.id())?;
             set_cpuset_to_pid(proc.id(), &CpuSet::single(cpu as u32)?)?;
-            set_sched_policy(proc.id(), SchedPolicy::RR(50))
-                .map_err(|err| err.into())
+            set_sched_policy(proc.id(), SchedPolicy::RR(50))?;
+
+            Ok(())
         })?;
 
     dl_processes.iter()
@@ -86,7 +89,9 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
                 runtime_ms: dl_runtime_ms,
                 deadline_ms: args.period_ms,
                 period_ms: args.period_ms,
-            }).map_err(|err| err.into())
+            })?;
+
+            Ok(())
         })?;
 
     wait_loop(args.max_time, ctrlc_flag)?;
@@ -100,14 +105,6 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
     for proc in dl_processes.iter() {
         deadline_total_usage += get_process_total_cpu_usage(proc.id())?;
     }
-
-    dl_processes.into_iter()
-        .try_for_each(|mut proc| proc.kill())?;
-
-    cgroup_processes.into_iter()
-        .try_for_each(|mut proc| proc.kill())?;
-
-    cgroup.destroy()?;
 
     restore_cgroups_runtime(rt_cgroup_runtime_orig)?;
 

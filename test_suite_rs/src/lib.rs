@@ -1,7 +1,5 @@
-use std::ops::{Deref, DerefMut};
 use crate::prelude::*;
 
-pub mod cgroup;
 pub mod process;
 pub mod utils;
 pub mod tests;
@@ -10,17 +8,16 @@ pub mod prelude {
     pub use hcbs_utils::prelude::*;
     pub use eva_rt_common::prelude::RTTask;
 
-    pub use super::cgroup::prelude::*;
     pub use super::process::prelude::*;
     pub use super::utils::prelude::*;
 
     pub use super::{
         NamedTaskset,
         NamedConfig,
-        MyProcess,
         run_yes,
         cpu_hog,
         local_executable_cmd,
+        is_multicpu_enabled,
     };
 }
 
@@ -38,31 +35,7 @@ pub struct NamedConfig {
     pub period: Time,
 }
 
-pub struct MyProcess {
-    process: std::process::Child,
-}
-
-impl Drop for MyProcess {
-    fn drop(&mut self) {
-        let _ = self.kill();
-    }
-}
-
-impl Deref for MyProcess {
-    type Target = std::process::Child;
-
-    fn deref(&self) -> &Self::Target {
-        &self.process
-    }
-}
-
-impl DerefMut for MyProcess {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.process
-    }
-}
-
-pub fn cpu_hog() -> anyhow::Result<MyProcess> {
+pub fn cpu_hog() -> anyhow::Result<HCBSProcess> {
     use std::process::*;
 
     let cmd = local_executable_cmd("/root/test_suite", "tools")?;
@@ -74,10 +47,10 @@ pub fn cpu_hog() -> anyhow::Result<MyProcess> {
         .stderr(Stdio::null())
         .spawn()?;
 
-    Ok(MyProcess { process: proc })
+    Ok(HCBSProcess::Child(proc))
 }
 
-pub fn run_yes() -> Result<MyProcess, std::io::Error> {
+pub fn run_yes() -> Result<HCBSProcess, std::io::Error> {
     use std::process::*;
 
     let proc = Command::new("yes")
@@ -86,7 +59,7 @@ pub fn run_yes() -> Result<MyProcess, std::io::Error> {
         .stderr(Stdio::null())
         .spawn()?;
 
-    Ok(MyProcess { process: proc })
+    Ok(HCBSProcess::Child(proc))
 }
 
 pub fn local_executable_cmd(def_dir: &str, name: &str) -> anyhow::Result<String> {
@@ -101,3 +74,19 @@ pub fn local_executable_cmd(def_dir: &str, name: &str) -> anyhow::Result<String>
     Ok(cmd)
 }
 
+pub fn is_multicpu_enabled() -> anyhow::Result<bool> {
+    mount_cgroup_cpu()?;
+
+    let name = "multicpu_test_cgroup";
+    if cgroup_exists(name) {
+        return Ok(false);
+    }
+
+    let mut cgroup = HCBSCgroup::new(name)?
+        .with_force_kill(false);
+
+    match cgroup.set_period_us_multi_str("100000 1") {
+        Ok(_) => Ok(true),
+        Err(_) => Ok(false),
+    }
+}

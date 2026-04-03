@@ -74,8 +74,10 @@ fn main() -> anyhow::Result<()> {
         MultiCPUEnabled(_) => {
             if hcbs_test_suite::prelude::is_multicpu_enabled()? {
                 println!("Multi CPU available");
+                std::process::exit(0);
             } else {
                 println!("Multi CPU NOT available");
+                std::process::exit(1);
             }
         }
     };

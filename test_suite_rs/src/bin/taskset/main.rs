@@ -6,6 +6,9 @@ pub struct Args {
     #[arg(long="runner", default_value="periodic-thread")]
     runner: Runner,
 
+    #[arg(long="multi-cpu", default_value="false")]
+    multi: bool,
+
     #[command(subcommand)]
     command: Command,
 }
@@ -40,15 +43,19 @@ fn main() -> anyhow::Result<()> {
     let args = <Args as clap::Parser>::parse();
 
     let main_run_taskset_array =
-        match args.runner {
-            Runner::PeriodicThread => periodic_thread::main_run_taskset_array,
-            Runner::RtApp => rt_app::main_run_taskset_array,
+        match (args.runner, args.multi) {
+            (Runner::PeriodicThread, false) => periodic_thread::main_run_taskset_array,
+            (Runner::PeriodicThread, true) => periodic_thread::main_run_taskset_array_multi,
+            (Runner::RtApp, false) => rt_app::main_run_taskset_array,
+            (Runner::RtApp, true) => rt_app::main_run_taskset_array_multi,
         };
 
     let main_run_taskset_single =
-        match args.runner {
-            Runner::PeriodicThread => periodic_thread::main_run_taskset_single,
-            Runner::RtApp => rt_app::main_run_taskset_single,
+        match (args.runner, args.multi) {
+            (Runner::PeriodicThread, false) => periodic_thread::main_run_taskset_single,
+            (Runner::PeriodicThread, true) => periodic_thread::main_run_taskset_single_multi,
+            (Runner::RtApp, false) => rt_app::main_run_taskset_single,
+            (Runner::RtApp, true) => rt_app::main_run_taskset_single_multi,
         };
 
     match args.command {

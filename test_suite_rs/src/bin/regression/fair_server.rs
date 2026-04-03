@@ -78,11 +78,5 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<f64> {
     let non_fifo_ratio =
         non_fifo_total_usage / (non_fifo_total_usage + fifo_total_usage);
 
-    fifo_processes.into_iter()
-        .try_for_each(|mut proc| proc.kill())?;
-
-    non_fifo_processes.into_iter()
-        .try_for_each(|mut proc| proc.kill())?;
-
     Ok(non_fifo_ratio)
 }

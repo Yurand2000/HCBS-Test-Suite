@@ -5,6 +5,8 @@ pub mod prelude {
     pub use super::{
         main_run_taskset_array,
         main_run_taskset_single,
+        main_run_taskset_array_multi,
+        main_run_taskset_single_multi,
     };
 }
 
@@ -16,7 +18,7 @@ pub fn main_run_taskset_array(args: RunnerArgsAll) -> anyhow::Result<Vec<Taskset
     run_taskset_array(
         &args,
         compute_cpu_speed,
-        run_taskset,
+        |run, args, cycles| run_taskset(run, args, cycles, false),
     )
 }
 
@@ -25,11 +27,29 @@ pub fn main_run_taskset_single(args: RunnerArgsSingle) -> anyhow::Result<Option<
     run_taskset_single(
         &args,
         compute_cpu_speed,
-        run_taskset,
+        |run, args, cycles| run_taskset(run, args, cycles, false),
     )
 }
 
-fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>)
+#[inline(always)]
+pub fn main_run_taskset_array_multi(args: RunnerArgsAll) -> anyhow::Result<Vec<TasksetRunResult>> {
+    run_taskset_array(
+        &args,
+        compute_cpu_speed,
+        |run, args, cycles| run_taskset(run, args, cycles, true),
+    )
+}
+
+#[inline(always)]
+pub fn main_run_taskset_single_multi(args: RunnerArgsSingle) -> anyhow::Result<Option<TasksetRunResult>> {
+    run_taskset_single(
+        &args,
+        compute_cpu_speed,
+        |run, args, cycles| run_taskset(run, args, cycles, true),
+    )
+}
+
+fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>, multi_runtime: bool)
     -> anyhow::Result<TasksetRunResult>
 {
     let log_dir = "/tmp/rt-app";
@@ -46,26 +66,34 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>)
         config_file
     )?;
 
-    let cgroup = MyCgroup::new(&args.cgroup, true)?;
-    cgroup_setup(
-        &args.cgroup,
-        run.config.runtime.as_micros() as u64,
-        run.config.period.as_micros() as u64
-    )?;
+    let cpu_set = CpuSet::any_subset(run.config.cpus)?;
+    let mut cgroup = HCBSCgroup::new(&args.cgroup)?
+        .with_force_kill(true);
+    cgroup.set_period_us(run.config.period.as_micros() as u64)?;
+    cgroup.set_runtime_us(run.config.runtime.as_micros() as u64)?;
 
-    assign_pid_to_cgroup(&args.cgroup, std::process::id())?;
-    set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
-    set_cpuset_to_pid(std::process::id(), &CpuSet::any_subset(run.config.cpus)?)?;
+    cgroup.set_period_us(run.config.period.as_micros() as u64)?;
+    if !multi_runtime  {
+        cgroup.set_runtime_us(run.config.runtime.as_micros() as u64)?;
+    } else {
+        cgroup.set_runtime_us_multi([
+            (run.config.runtime.as_micros() as u64,
+            cpu_set.iter().map(|cpu| *cpu))
+        ])?;
+    }
+
+    let self_proc = cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?;
+    // these settings will be inherited by the periodic thread runner
+    self_proc.set_sched_policy(SchedPolicy::RR(99))?;
+    if !multi_runtime  {
+        self_proc.set_affinity(cpu_set)?;
+    }
 
     let mut proc = run_rt_app(config_file, stdout_file)?;
     proc.wait()
         .map_err(|err| anyhow::format_err!("Error in waiting for rt-app: {err}"))?;
 
-    set_cpuset_to_pid(std::process::id(), &CpuSet::all()?)?;
-    set_sched_policy(std::process::id(), SchedPolicy::other())?;
-    assign_pid_to_cgroup(".", std::process::id())?;
-
-    cgroup.destroy()?;
+    std::mem::drop(cgroup);
 
     let result = result_parser::parse_taskset_results(&run.taskset, log_dir)?;
     let result = TasksetRunResult {
@@ -113,7 +141,7 @@ fn compute_cpu_speed() -> anyhow::Result<u64> {
         })
 }
 
-fn run_rt_app(config_file: &str, stdout_file: &str) -> anyhow::Result<MyProcess> {
+fn run_rt_app(config_file: &str, stdout_file: &str) -> anyhow::Result<HCBSProcess> {
     use std::process::*;
 
     let cmd = local_executable_cmd("/bin", "rt-app")?;
@@ -129,5 +157,5 @@ fn run_rt_app(config_file: &str, stdout_file: &str) -> anyhow::Result<MyProcess>
         .spawn()
         .map_err(|err| anyhow::format_err!("Error in starting rt-app: {err}"))?;
 
-    Ok(MyProcess { process: proc })
+    Ok(HCBSProcess::Child(proc))
 }

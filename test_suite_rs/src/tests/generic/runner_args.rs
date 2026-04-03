@@ -51,7 +51,7 @@ pub struct RunnerArgsBase {
     /// max allocable bandwidth for the cgroup. This is usually 0.90 as 5% of
     /// the bandwidth is reserved for SCHED_OTHER tasks and the other 5% is used
     /// for overheads (?).
-    #[arg(short = 'b', long = "max-bw", value_name = "f32", default_value = "0.90")]
+    #[arg(short = 'b', long = "max-bw", value_name = "f32", default_value = "0.85")]
     pub max_allocable_bw: f64,
 
     /// number of instances per job
