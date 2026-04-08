@@ -40,6 +40,8 @@ enum Runner {
 }
 
 fn main() -> anyhow::Result<()> {
+    env_logger::init();
+
     let args = <Args as clap::Parser>::parse();
 
     let main_run_taskset_array =

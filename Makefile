@@ -16,7 +16,7 @@ install-tar: $(BUILD)/install.tar.gz
 
 # Taskset builder is currently under costruction
 # build: cgroup periodic scripts tasksets
-build: cgroup periodic rt-app scripts
+build: cgroup periodic rt-app scripts tasksets
 
 install: build
 	mkdir -p $(O)
