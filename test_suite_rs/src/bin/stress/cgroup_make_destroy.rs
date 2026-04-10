@@ -49,11 +49,13 @@ pub fn main(args: MyArgs, rng: Option<&mut dyn rand::Rng>, ctrlc_flag: Option<Ex
             cgroup.set_runtime_us(runtime_ms * 1000)?;
 
             cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?
-                .set_sched_policy(SchedPolicy::RR(99))?;
+                .set_sched_policy(SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
 
             let num_procs = rng.random_range(1..=5);
-            let procs = (0..num_procs)
-                .map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
+            for _ in 0 .. num_procs {
+                let proc = cgroup.assign_process(run_yes()?).map_err(|(_, err)| err)?;
+                proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())?;
+            }
 
             thread::sleep(std::time::Duration::from_secs_f32(rng.random_range(0.5f32..=2f32)));
 

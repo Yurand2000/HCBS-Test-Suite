@@ -26,7 +26,7 @@ pub fn main(args: MyArgs) -> anyhow::Result<()> {
     mount_debug_fs()?;
 
     assign_pid_to_cgroup(".", std::process::id())?;
-    set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
+    set_sched_policy(std::process::id(), SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
 
     let target_runtime_us = args.bw_ms * 1000;
     let target_fair_server_us = 1000_000 - target_runtime_us;

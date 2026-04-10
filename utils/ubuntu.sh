@@ -10,10 +10,11 @@ docker build -t "$CONTAINER" -f "$DOCKERFILE" "$SCRIPT_DIR" || exit 1
 
 docker run -ti --rm \
     --user `id -u`:`id -g` \
-    --workdir "/home/devContainer/+build/busybox"\
+    --workdir "/home/devContainer/+build/"\
     --volume "/etc/group:/etc/group:ro" \
     --volume "/etc/passwd:/etc/passwd:ro" \
     --volume "/etc/shadow:/etc/shadow:ro" \
     --volume "$ROOT_DIR:/home/devContainer:ro" \
     --volume "$ROOT_DIR/+build/busybox:/home/devContainer/+build/busybox:rw" \
+    --volume "$ROOT_DIR/+build/binutils:/home/devContainer/+build/binutils:rw" \
     "$CONTAINER" /bin/sh -c "$COMMAND"

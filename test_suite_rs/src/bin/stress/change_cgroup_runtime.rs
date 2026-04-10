@@ -54,9 +54,10 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<()> {
     cgroup.set_runtime_us(args.runtime1_ms * 1000)?;
 
     cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?
-        .set_sched_policy(SchedPolicy::RR(99))?;
+        .set_sched_policy(SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
 
-    cgroup.assign_process(run_yes()?).map_err(|(_, err)| err)?;
+    let proc = cgroup.assign_process(run_yes()?).map_err(|(_, err)| err)?;
+    proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())?;
     let mut state = args.runtime1_ms;
 
     let update_fn = || {

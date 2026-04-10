@@ -71,8 +71,7 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>, mult
     }
 
     let self_proc = cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?;
-    // these settings will be inherited by the periodic thread runner
-    self_proc.set_sched_policy(SchedPolicy::RR(99))?;
+    self_proc.set_sched_policy(SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
     if !multi_runtime  {
         self_proc.set_affinity(cpu_set)?;
     }
@@ -106,7 +105,7 @@ fn compute_cpu_speed() -> anyhow::Result<u64> {
 
     // run periodic thread to calibrate
     assign_pid_to_cgroup(".", std::process::id())?;
-    set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
+    set_sched_policy(std::process::id(), SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
     set_cpuset_to_pid(std::process::id(), &CpuSet::any_subset(1)?)?;
 
     let mut proc = run_periodic_thread(PeriodicThreadData {
@@ -125,7 +124,7 @@ fn compute_cpu_speed() -> anyhow::Result<u64> {
         .map_err(|err| anyhow::format_err!("Error in waiting for periodic_thread: {err}"))?;
 
     set_cpuset_to_pid(std::process::id(), &CpuSet::all()?)?;
-    set_sched_policy(std::process::id(), SchedPolicy::other())?;
+    set_sched_policy(std::process::id(), SchedPolicy::other(), SchedFlags::RESET_ON_FORK)?;
 
     // read calibration results
     let out_data = std::fs::read_to_string(&out_file)

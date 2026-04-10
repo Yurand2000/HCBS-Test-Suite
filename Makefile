@@ -16,7 +16,7 @@ install-tar: $(BUILD)/install.tar.gz
 
 # Taskset builder is currently under costruction
 # build: cgroup periodic scripts tasksets
-build: cgroup periodic rt-app scripts tasksets
+build: cgroup periodic rt-app scripts tasksets binutils perfetto
 
 install: build
 	mkdir -p $(O)
@@ -49,7 +49,7 @@ $(BUILD)/mnt/root/tasksets/.keep: $(BUILD)/.keep
 	touch $@
 
 # extra scripts
-SCRIPTS = $(wildcard scripts/*)
+SCRIPTS = $(shell find scripts -type f)
 
 .PHONY: scripts
 scripts: $(BUILD)/scripts.keep
@@ -129,8 +129,56 @@ $(BUILD)/BuildCore/.keep: $(BUILD)/.keep
 
 $(BUILD)/initrd-busybox.gz: $(BUILD)/BuildCore/.keep
 	mkdir -p $(BUILD)/busybox
-	sh $(MAKEFILE_DIR)/utils/ubuntu.sh "sh ../BuildCore/buildcore.sh ./$(@F)"
+	sh $(MAKEFILE_DIR)/utils/ubuntu.sh "sh ./BuildCore/buildcore.sh ./busybox/$(@F)"
 	cp -u $(BUILD)/busybox/bb_build-1.36.1/_install/initrd-busybox.gz $@
+
+# binutils (only for initramfs)
+.PHONY: binutils
+binutils: $(BUILD)/mnt/bin/nm
+
+$(BUILD)/binutils.tar.gz: $(BUILD)/.keep
+	wget 'http://ftp.gnu.org/gnu/binutils/binutils-2.46.0.tar.gz' -O $@
+	touch $@
+
+$(BUILD)/binutils/src/.keep: $(BUILD)/binutils.tar.gz
+	mkdir -p $(BUILD)/binutils
+	cd "$(BUILD)/binutils"; tar -xzf $<
+	mv $(BUILD)/binutils/binutils-2.46.0 $(@D)
+	touch $@
+
+$(BUILD)/binutils/bin/.keep: $(BUILD)/binutils/src/.keep
+	mkdir -p $(BUILD)/binutils/bin
+	sh $(MAKEFILE_DIR)/utils/ubuntu.sh \
+		'cd /home/devContainer/+build/binutils/src; \
+		./configure --disable-nls --prefix=/home/devContainer/+build/binutils/bin; \
+		make configure-host; \
+		make LDFLAGS=-all-static; \
+		make install'
+	touch $@
+
+$(BUILD)/mnt/bin/nm: $(BUILD)/binutils/bin/.keep
+	mkdir -p $(@D)
+	cp -u $(<D)/bin/nm $@
+
+# perfetto
+.PHONY: perfetto
+perfetto: $(BUILD)/mnt/bin/tracebox
+
+$(BUILD)/perfetto-src/.keep: $(BUILD)/.keep
+	git clone --depth 1 https://github.com/google/perfetto $(@D)
+	cd $(@D); tools/install-build-deps --no-dev-tools
+	touch $@
+
+$(BUILD)/perfetto/args.gn: $(BUILD)/perfetto-src/.keep
+	cd $(<D); tools/gn gen --args='is_debug=false enable_perfetto_x64_cpu_opt=false extra_ldflags="-static"' $(@D)
+
+$(BUILD)/perfetto/.keep: $(BUILD)/perfetto-src/.keep $(BUILD)/perfetto/args.gn
+	cd $(<D); tools/ninja -C $(@D) -j $(shell nproc) tracebox
+	touch $@
+
+$(BUILD)/mnt/bin/tracebox: $(BUILD)/perfetto/.keep
+	cp -u $(<D)/tracebox $@
+	chmod +x $@
 
 ### compressed targets
 # initramfs
@@ -148,10 +196,12 @@ $(BUILD)/install.tar.gz: build
 	cd $(BUILD)/mnt/root && tar -czvf ../../install.tar.gz .
 
 # generic
+.PRECIOUS: $(BUILD)/mnt/.keep
 $(BUILD)/mnt/.keep:
 	mkdir -p $(@D)
 	touch $@
 
+.PRECIOUS: $(BUILD)/.keep
 $(BUILD)/.keep:
 	mkdir -p $(@D)
 	touch $@

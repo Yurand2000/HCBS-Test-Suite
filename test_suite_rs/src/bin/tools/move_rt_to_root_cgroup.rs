@@ -13,7 +13,7 @@ pub fn main() -> anyhow::Result<()> {
     for (pid, _) in system.processes() {
         use hcbs_test_suite::prelude::SchedPolicy::*;
 
-        match get_sched_policy(pid.as_u32()) {
+        match get_sched_policy(pid.as_u32()).map(|(policy, _)| policy) {
             Ok(OTHER {..}) | Ok(BATCH {..}) | Ok(IDLE) => { continue; },
             Ok(_) => (),
             Err(err) => {

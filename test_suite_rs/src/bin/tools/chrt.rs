@@ -24,7 +24,7 @@ pub fn main(args: MyArgs) -> anyhow::Result<()> {
         runtime_ms: args.runtime_ms,
         deadline_ms: args.deadline_ms,
         period_ms: args.period_ms,
-    })?;
+    }, SchedFlags::RESET_ON_FORK)?;
 
     Ok(())
 }

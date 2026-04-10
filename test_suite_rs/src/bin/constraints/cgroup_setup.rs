@@ -40,7 +40,7 @@ fn add_task_to_runtime_zero(cgroup_name: &str) -> anyhow::Result<()> {
     let mut yes = run_yes()?;
 
     let failure: anyhow::Result<()> =
-        set_sched_policy(yes.id(), SchedPolicy::RR(50)).map_err(|err| err.into())
+        set_sched_policy(yes.id(), SchedPolicy::RR(50), SchedFlags::empty()).map_err(|err| err.into())
             .and_then(|_| assign_pid_to_cgroup(cgroup_name, yes.id()));
 
     yes.kill()?;
@@ -58,7 +58,7 @@ fn set_runtime_zero_to_active(cgroup_name: &str) -> anyhow::Result<()> {
     set_cgroup_period_us(cgroup_name, 100_000)?;
     set_cgroup_runtime_us(cgroup_name, 10_000)?;
     let mut yes = run_yes()?;
-    set_sched_policy(yes.id(), SchedPolicy::RR(50))?;
+    set_sched_policy(yes.id(), SchedPolicy::RR(50), SchedFlags::empty())?;
     assign_pid_to_cgroup(cgroup_name, yes.id())?;
 
     let failed = set_cgroup_runtime_us(cgroup_name, 0);
@@ -79,7 +79,7 @@ fn set_runtime_zero_to_active_multi(cgroup_name: &str) -> anyhow::Result<()> {
     set_cgroup_period_us(cgroup_name, 100_000)?;
     set_cgroup_runtime_us_multi_str(cgroup_name, "10000 0")?;
     let mut yes = run_yes()?;
-    set_sched_policy(yes.id(), SchedPolicy::RR(50))?;
+    set_sched_policy(yes.id(), SchedPolicy::RR(50), SchedFlags::empty())?;
     assign_pid_to_cgroup(cgroup_name, yes.id())?;
 
     let failed = set_cgroup_runtime_us_multi_str(cgroup_name, "0 0");
@@ -101,7 +101,7 @@ fn main() -> anyhow::Result<()> {
     mount_cgroup_cpu()?;
 
     assign_pid_to_cgroup(".", std::process::id())?;
-    set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
+    set_sched_policy(std::process::id(), SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
 
     // batch test utils
     let test_category = "constraints";

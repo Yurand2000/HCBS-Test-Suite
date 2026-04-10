@@ -378,6 +378,7 @@ name = "hcbs-utils"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "bitflags",
  "eva-rt-common",
  "libc",
  "log",

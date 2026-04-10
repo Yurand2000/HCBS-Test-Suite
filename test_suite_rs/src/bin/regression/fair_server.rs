@@ -47,7 +47,7 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<f64> {
     let fifo_processes = (0..cpus).map(|_| cpu_hog()).collect::<Result<Vec<_>, _>>()?;
     let non_fifo_processes = (0..cpus).map(|_| cpu_hog()).collect::<Result<Vec<_>, _>>()?;
 
-    set_sched_policy(std::process::id(), SchedPolicy::RR(99))?;
+    set_sched_policy(std::process::id(), SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
     non_fifo_processes.iter()
         .enumerate()
         .try_for_each(|(i, proc)| {
@@ -58,7 +58,7 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<f64> {
         .enumerate()
         .try_for_each::<_, anyhow::Result<_>>(|(i, proc)| {
             set_cpuset_to_pid(proc.id(), &CpuSet::single(i as u32)?)?;
-            set_sched_policy(proc.id(), SchedPolicy::RR(50))?;
+            set_sched_policy(proc.id(), SchedPolicy::RR(50), SchedFlags::empty())?;
 
             Ok(())
         })?;
