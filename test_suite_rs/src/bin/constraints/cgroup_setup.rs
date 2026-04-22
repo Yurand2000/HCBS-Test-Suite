@@ -57,6 +57,7 @@ fn set_runtime_zero_to_active(cgroup_name: &str) -> anyhow::Result<()> {
     create_cgroup(cgroup_name)?;
     set_cgroup_period_us(cgroup_name, 100_000)?;
     set_cgroup_runtime_us(cgroup_name, 10_000)?;
+
     let mut yes = run_yes()?;
     set_sched_policy(yes.id(), SchedPolicy::RR(50), SchedFlags::empty())?;
     assign_pid_to_cgroup(cgroup_name, yes.id())?;

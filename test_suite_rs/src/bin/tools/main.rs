@@ -1,4 +1,4 @@
-mod realtime_bw_change;
+mod setup_fair_servers;
 mod move_rt_to_root_cgroup;
 mod cgroup_setup;
 mod hrtick;
@@ -23,9 +23,9 @@ pub enum Command {
     #[command(name = "mount-debug-fs", verbatim_doc_comment)]
     MountDebugFS,
 
-    /// Change the badwidth allocated to real-time tasks (both FIFO/RR and DEADLINE)
-    #[command(name = "rt-bw-change", verbatim_doc_comment)]
-    RealtimeBwChange(realtime_bw_change::MyArgs),
+    /// Change the badwidth allocated to fair (or ext) servers
+    #[command(name = "setup-fair-servers", verbatim_doc_comment)]
+    SetupFairServers(setup_fair_servers::MyArgs),
 
     /// Move all real-time tasks to the root control group
     #[command(name = "move-to-root", verbatim_doc_comment)]
@@ -66,7 +66,7 @@ fn main() -> anyhow::Result<()> {
         MountCgroupFS => hcbs_utils::cgroup::mount_cgroup_fs()?,
         MountCgroupCPU => hcbs_utils::cgroup::mount_cgroup_cpu()?,
         MountDebugFS => hcbs_utils::debugfs::mount_debug_fs()?,
-        RealtimeBwChange(args) => realtime_bw_change::main(args)?,
+        SetupFairServers(args) => setup_fair_servers::main(args)?,
         MoveRtTasksToRootCgroup => move_rt_to_root_cgroup::main()?,
         CgroupBwChange(args) => cgroup_setup::main(args)?,
         HRTick(args) => hrtick::main(args)?,

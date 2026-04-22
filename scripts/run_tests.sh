@@ -24,7 +24,9 @@ setup() {
         ./test_suite/tools move-to-root          &&
         ./test_suite/tools mount-cgroup-cpu      &&
         ./test_suite/tools mount-debug-fs        &&
-        ./test_suite/tools cgroup-setup -r 850
+        ./test_suite/tools setup-fair-servers \
+                           -r 0 -p 1000000 --ext &&
+        ./test_suite/tools cgroup-setup -r 950
     ) || exit 1
 }
 
@@ -110,12 +112,12 @@ random_stress() {
 
 tasksets() {
     echo "* Taskset Tests - periodic-thread *"
-    TESTBINDIR=bin ./test_suite/taskset --runner periodic-thread all -n $(nproc) -i ./tasksets -o ./tasksets_out || true
+    TESTBINDIR=bin ./test_suite/taskset --runner periodic-thread all -b 0.95 -n $(nproc) -i ./tasksets -o ./tasksets_out || true
 }
 
 tasksets_rt_app() {
     echo "* Taskset Tests - rt-app *"
-    TESTBINDIR=bin ./test_suite/taskset --runner rt-app all -n $(nproc) -i ./tasksets -o ./tasksets_out || true
+    TESTBINDIR=bin ./test_suite/taskset --runner rt-app all -b 0.95 -n $(nproc) -i ./tasksets -o ./tasksets_out || true
 }
 
 export BATCH_TEST=1
