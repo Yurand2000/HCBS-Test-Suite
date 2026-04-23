@@ -17,6 +17,5 @@ docker run --rm \
     --volume "/etc/group:/etc/group:ro" \
     --volume "/etc/passwd:/etc/passwd:ro" \
     --volume "/etc/shadow:/etc/shadow:ro" \
-    --volume "$ROOT_DIR:/home/devContainer:ro" \
     --volume "$BUILD_DIR:/home/devContainer/+build:rw" \
     "$CONTAINER" /bin/sh -c "$COMMAND"
