@@ -129,8 +129,9 @@ $(BUILD)/BuildCore/.keep: $(BUILD)/.keep
 
 $(BUILD)/initrd-busybox.gz: $(BUILD)/BuildCore/.keep
 	mkdir -p $(BUILD)/busybox
-	sh $(MAKEFILE_DIR)/utils/ubuntu.sh "sh ./BuildCore/buildcore.sh ./busybox/$(@F)"
-	cp -u $(BUILD)/busybox/bb_build-1.36.1/_install/initrd-busybox.gz $@
+	sh $(MAKEFILE_DIR)/utils/ubuntu.sh 'ls $$(pwd)' "$(BUILD)"
+	sh $(MAKEFILE_DIR)/utils/ubuntu.sh 'sh ./BuildCore/buildcore.sh ./initrd-busybox.gz' "$(BUILD)"
+	cp -u $(BUILD)/bb_build-1.36.1/_install/initrd-busybox.gz $@
 
 # binutils (only for initramfs)
 .PHONY: binutils
@@ -153,7 +154,8 @@ $(BUILD)/binutils/bin/.keep: $(BUILD)/binutils/src/.keep
 		./configure --disable-nls --prefix=/home/devContainer/+build/binutils/bin; \
 		make configure-host; \
 		make LDFLAGS=-all-static; \
-		make install'
+		make install' \
+		"$(BUILD)"
 	touch $@
 
 $(BUILD)/mnt/bin/nm: $(BUILD)/binutils/bin/.keep
