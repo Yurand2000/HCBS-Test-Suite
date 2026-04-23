@@ -1,5 +1,4 @@
 use hcbs_test_suite::prelude::*;
-use std::thread;
 use rand::RngExt as _;
 
 #[derive(clap::Parser, Debug)]
@@ -57,7 +56,7 @@ pub fn main(args: MyArgs, rng: Option<&mut dyn rand::Rng>, ctrlc_flag: Option<Ex
                 proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())?;
             }
 
-            thread::sleep(std::time::Duration::from_secs_f32(rng.random_range(0.5f32..=2f32)));
+            std::thread::sleep(std::time::Duration::from_secs_f32(rng.random_range(0.5f32..=2f32)));
 
             Ok(())
         }

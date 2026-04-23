@@ -70,16 +70,13 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>, mult
     let mut cgroup = HCBSCgroup::new(&args.cgroup)?
         .with_force_kill(true);
     cgroup.set_period_us(run.config.period.as_micros() as u64)?;
-    cgroup.set_runtime_us(run.config.runtime.as_micros() as u64)?;
-
-    cgroup.set_period_us(run.config.period.as_micros() as u64)?;
     if !multi_runtime  {
         cgroup.set_runtime_us(run.config.runtime.as_micros() as u64)?;
     } else {
-        cgroup.set_runtime_us_multi([
-            (run.config.runtime.as_micros() as u64,
-            cpu_set.iter().map(|cpu| *cpu))
-        ])?;
+        cgroup.set_runtime_us_multi([(
+            run.config.runtime.as_micros() as u64,
+            cpu_set.iter().map(|cpu| *cpu).collect::<Vec<_>>()
+        )])?;
     }
 
     let self_proc = cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?;
