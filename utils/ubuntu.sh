@@ -11,7 +11,7 @@ BUILD_DIR=${2:-"$ROOT_DIR/+build"}
 
 docker build -t "$CONTAINER" -f "$DOCKERFILE" "$SCRIPT_DIR" || exit 1
 
-docker run -ti --rm \
+docker run --rm \
     --user `id -u`:`id -g` \
     --workdir "/home/devContainer/+build/"\
     --volume "/etc/group:/etc/group:ro" \
