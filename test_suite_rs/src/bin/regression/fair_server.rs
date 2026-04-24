@@ -44,21 +44,20 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<f64> {
     let cpus = CpuSet::all()?.num_cpus();
 
     assign_pid_to_cgroup(".", std::process::id())?;
-    let fifo_processes = (0..cpus).map(|_| cpu_hog()).collect::<Result<Vec<_>, _>>()?;
-    let non_fifo_processes = (0..cpus).map(|_| cpu_hog()).collect::<Result<Vec<_>, _>>()?;
-
     set_sched_policy(std::process::id(), SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
-    non_fifo_processes.iter()
-        .enumerate()
-        .try_for_each(|(i, proc)| {
-            set_cpuset_to_pid(proc.id(), &CpuSet::single(i as u32)?)
-        })?;
 
-    fifo_processes.iter()
+    let mut fifo_processes = (0..cpus).map(|_| cpu_hog()).collect::<Result<Vec<_>, _>>()?;
+    let mut non_fifo_processes = (0..cpus).map(|_| cpu_hog()).collect::<Result<Vec<_>, _>>()?;
+
+    non_fifo_processes.iter_mut()
+        .enumerate()
+        .try_for_each(|(i, proc)| proc.set_affinity(CpuSet::single(i as u32)?))?;
+
+    fifo_processes.iter_mut()
         .enumerate()
         .try_for_each::<_, anyhow::Result<_>>(|(i, proc)| {
-            set_cpuset_to_pid(proc.id(), &CpuSet::single(i as u32)?)?;
-            set_sched_policy(proc.id(), SchedPolicy::RR(50), SchedFlags::empty())?;
+            proc.set_affinity(CpuSet::single(i as u32)?)?;
+            proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())?;
 
             Ok(())
         })?;

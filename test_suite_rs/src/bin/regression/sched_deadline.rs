@@ -60,55 +60,66 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 }
 
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, f64)> {
-    let rt_cgroup_runtime_orig = reduce_cgroups_runtime()?;
+    let main_fn = || {
+        let cpus = CpuSet::all()?.num_cpus();
+        let mut cgroup = HCBSCgroup::new(&args.cgroup)?
+            .with_force_kill(false);
+        cgroup.set_period_us(args.period_ms * 1000)?;
+        cgroup.set_runtime_us(args.runtime_ms * 1000)?;
+        let dl_runtime_ms = args.period_ms * 4 / 10;
 
-    let cpus = CpuSet::all()?.num_cpus();
-    let mut cgroup = HCBSCgroup::new(&args.cgroup)?
-        .with_force_kill(false);
-    cgroup.set_period_us(args.period_ms * 1000)?;
-    cgroup.set_runtime_us(args.runtime_ms * 1000)?;
-    let dl_runtime_ms = args.period_ms * 4 / 10;
+        let mut dl_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
+        let cgroup_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
+
+        let cgroup_processes =
+            cgroup_processes.into_iter().enumerate()
+                .map(|(cpu, proc)| -> anyhow::Result<_> {
+                    let id = proc.id();
+
+                    let proc = cgroup.assign_process(proc).map_err(|(_, err)| err)?;
+                    proc.set_affinity(CpuSet::single(cpu as u32)?)?;
+                    proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())?;
+
+                    Ok(id)
+                })
+                .collect::<Result<Vec<_>, _>>()?;
+
+        dl_processes.iter_mut()
+            .try_for_each(|proc| -> anyhow::Result<()> {
+                proc.set_sched_policy(SchedPolicy::DEADLINE {
+                    runtime_ms: dl_runtime_ms,
+                    deadline_ms: args.period_ms,
+                    period_ms: args.period_ms,
+                }, SchedFlags::RESET_ON_FORK)?;
+
+                Ok(())
+            })?;
+
+        wait_loop(args.max_time, ctrlc_flag)?;
+
+        let mut cgroup_total_usage = 0f64;
+        for proc in cgroup_processes.iter() {
+            cgroup_total_usage += get_process_total_cpu_usage(*proc)?;
+        }
+
+        let mut deadline_total_usage = 0f64;
+        for proc in dl_processes.iter() {
+            deadline_total_usage += get_process_total_cpu_usage(proc.id())?;
+        }
+
+        cgroup.destroy()?;
+
+        Ok((deadline_total_usage, cgroup_total_usage))
+    };
 
     assign_pid_to_cgroup(".", std::process::id())?;
-    let dl_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
-    let cgroup_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
-
     set_sched_policy(std::process::id(), SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
-    cgroup_processes.iter().enumerate()
-        .try_for_each(|(cpu, proc)| -> anyhow::Result<()> {
-            assign_pid_to_cgroup(&args.cgroup, proc.id())?;
-            set_cpuset_to_pid(proc.id(), &CpuSet::single(cpu as u32)?)?;
-            set_sched_policy(proc.id(), SchedPolicy::RR(50), SchedFlags::empty())?;
 
-            Ok(())
-        })?;
-
-    dl_processes.iter()
-        .try_for_each(|proc| -> anyhow::Result<()> {
-            set_sched_policy(proc.id(), SchedPolicy::DEADLINE {
-                runtime_ms: dl_runtime_ms,
-                deadline_ms: args.period_ms,
-                period_ms: args.period_ms,
-            }, SchedFlags::RESET_ON_FORK)?;
-
-            Ok(())
-        })?;
-
-    wait_loop(args.max_time, ctrlc_flag)?;
-
-    let mut cgroup_total_usage = 0f64;
-    for proc in cgroup_processes.iter() {
-        cgroup_total_usage += get_process_total_cpu_usage(proc.id())?;
-    }
-
-    let mut deadline_total_usage = 0f64;
-    for proc in dl_processes.iter() {
-        deadline_total_usage += get_process_total_cpu_usage(proc.id())?;
-    }
-
+    let rt_cgroup_runtime_orig = reduce_cgroups_runtime()?;
+    let res = main_fn();
     restore_cgroups_runtime(rt_cgroup_runtime_orig)?;
 
-    Ok((deadline_total_usage, cgroup_total_usage))
+    res
 }
 
 fn reduce_cgroups_runtime() -> anyhow::Result<u64> {
