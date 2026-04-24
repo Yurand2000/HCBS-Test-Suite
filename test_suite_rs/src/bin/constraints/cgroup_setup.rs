@@ -2,13 +2,11 @@ use hcbs_test_suite::*;
 use hcbs_test_suite::prelude::*;
 
 fn cgroup_setup_fail(cgroup_name: &str, runtime_us: u64, period_us: u64) -> anyhow::Result<()> {
-    create_cgroup(cgroup_name)?;
+    let mut cgroup = HCBSCgroup::new(cgroup_name)?;
 
     let failure: Result<(), _> =
-        set_cgroup_period_us(cgroup_name, period_us)
-            .and_then(|_| set_cgroup_runtime_us(cgroup_name, runtime_us));
-
-    delete_cgroup(cgroup_name)?;
+        cgroup.set_period_us(period_us)
+            .and_then(|_| cgroup.set_runtime_us(runtime_us));
 
     if failure.is_ok() {
         anyhow::bail!("Cgroup \'{cgroup_name}\' creation with {runtime_us}/{period_us} did not fail")
@@ -18,13 +16,11 @@ fn cgroup_setup_fail(cgroup_name: &str, runtime_us: u64, period_us: u64) -> anyh
 }
 
 fn cgroup_setup_fail_multi(cgroup_name: &str, runtimes_us: &str, periods_us: &str) -> anyhow::Result<()> {
-    create_cgroup(cgroup_name)?;
+    let mut cgroup = HCBSCgroup::new(cgroup_name)?;
 
     let failure: Result<(), _> =
-        set_cgroup_period_us_multi_str(cgroup_name, periods_us)
-            .and_then(|_| set_cgroup_runtime_us_multi_str(cgroup_name, runtimes_us));
-
-    delete_cgroup(cgroup_name)?;
+        cgroup.set_period_us_multi_str(periods_us)
+            .and_then(|_| cgroup.set_runtime_us_multi_str(runtimes_us));
 
     if failure.is_ok() {
         anyhow::bail!("Cgroup \'{cgroup_name}\' creation with {runtimes_us:?}/{periods_us:?} did not fail")
@@ -34,17 +30,15 @@ fn cgroup_setup_fail_multi(cgroup_name: &str, runtimes_us: &str, periods_us: &st
 }
 
 fn add_task_to_runtime_zero(cgroup_name: &str) -> anyhow::Result<()> {
-    create_cgroup(cgroup_name)?;
-    set_cgroup_period_us(cgroup_name, 100_000)?;
-    set_cgroup_runtime_us(cgroup_name, 0)?;
+    let mut cgroup = HCBSCgroup::new(cgroup_name)?;
+    cgroup.set_period_us(100_000)?;
+    cgroup.set_runtime_us(0)?;
+
     let mut yes = run_yes()?;
 
     let failure: anyhow::Result<()> =
-        set_sched_policy(yes.id(), SchedPolicy::RR(50), SchedFlags::empty()).map_err(|err| err.into())
-            .and_then(|_| assign_pid_to_cgroup(cgroup_name, yes.id()));
-
-    yes.kill()?;
-    delete_cgroup(cgroup_name)?;
+        yes.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty()).map_err(|err| err.into())
+            .and_then(|_| cgroup.assign_process(yes).map(|_| ()).map_err(|(_, err)| err));
 
     if failure.is_ok() {
         anyhow::bail!("Cgroup with 0 runtime must not allow to run tasks")
@@ -54,21 +48,18 @@ fn add_task_to_runtime_zero(cgroup_name: &str) -> anyhow::Result<()> {
 }
 
 fn set_runtime_zero_to_active(cgroup_name: &str) -> anyhow::Result<()> {
-    create_cgroup(cgroup_name)?;
-    set_cgroup_period_us(cgroup_name, 100_000)?;
-    set_cgroup_runtime_us(cgroup_name, 10_000)?;
+    let mut cgroup = HCBSCgroup::new(cgroup_name)?;
+    cgroup.set_period_us(100_000)?;
+    cgroup.set_runtime_us(10_000)?;
 
     let mut yes = run_yes()?;
-    set_sched_policy(yes.id(), SchedPolicy::RR(50), SchedFlags::empty())?;
-    assign_pid_to_cgroup(cgroup_name, yes.id())?;
 
-    let failed = set_cgroup_runtime_us(cgroup_name, 0);
+    yes.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty()).map_err(|err| err.into())
+        .and_then(|_| cgroup.assign_process(yes).map(|_| ()).map_err(|(_, err)| err))?;
 
-    yes.kill()?;
-    assign_pid_to_cgroup(".", yes.id())?;
-    delete_cgroup(cgroup_name)?;
+    let failure = set_cgroup_runtime_us(cgroup_name, 0);
 
-    if failed.is_ok() {
+    if failure.is_ok() {
         anyhow::bail!("Cannot set runtime zero to cgroup with active tasks")
     } else {
         Ok(())
@@ -76,20 +67,17 @@ fn set_runtime_zero_to_active(cgroup_name: &str) -> anyhow::Result<()> {
 }
 
 fn set_runtime_zero_to_active_multi(cgroup_name: &str) -> anyhow::Result<()> {
-    create_cgroup(cgroup_name)?;
-    set_cgroup_period_us(cgroup_name, 100_000)?;
-    set_cgroup_runtime_us_multi_str(cgroup_name, "10000 0")?;
+    let mut cgroup = HCBSCgroup::new(cgroup_name)?;
+    cgroup.set_period_us(100_000)?;
+    cgroup.set_runtime_us_multi_str("10000 0")?;
+
     let mut yes = run_yes()?;
-    set_sched_policy(yes.id(), SchedPolicy::RR(50), SchedFlags::empty())?;
-    assign_pid_to_cgroup(cgroup_name, yes.id())?;
+    yes.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty()).map_err(|err| err.into())
+        .and_then(|_| cgroup.assign_process(yes).map(|_| ()).map_err(|(_, err)| err))?;
 
-    let failed = set_cgroup_runtime_us_multi_str(cgroup_name, "0 0");
+    let failure = set_cgroup_runtime_us_multi_str(cgroup_name, "0 0");
 
-    yes.kill()?;
-    assign_pid_to_cgroup(".", yes.id())?;
-    delete_cgroup(cgroup_name)?;
-
-    if failed.is_ok() {
+    if failure.is_ok() {
         anyhow::bail!("Cannot set runtime zero to cgroup with active tasks")
     } else {
         Ok(())

@@ -60,30 +60,35 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 }
 
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, f64)> {
+    assign_pid_to_cgroup(".", std::process::id())?;
+    set_sched_policy(std::process::id(), SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
+
     let cpus = CpuSet::all()?.num_cpus();
     let mut cgroup = HCBSCgroup::new(&args.cgroup)?
         .with_force_kill(false);
     cgroup.set_period_us(args.period_ms * 1000)?;
     cgroup.set_runtime_us(args.runtime_ms * 1000)?;
 
-    assign_pid_to_cgroup(".", std::process::id())?;
-    let fifo_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
+    let mut fifo_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
     let cgroup_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
 
-    set_sched_policy(std::process::id(), SchedPolicy::FIFO(99), SchedFlags::RESET_ON_FORK)?;
-    cgroup_processes.iter().enumerate()
-        .try_for_each(|(cpu, proc)| -> anyhow::Result<()> {
-            assign_pid_to_cgroup(&args.cgroup, proc.id())?;
-            set_cpuset_to_pid(proc.id(), &CpuSet::single(cpu as u32)?)?;
-            set_sched_policy(proc.id(), SchedPolicy::FIFO(50), SchedFlags::empty())?;
+    let cgroup_processes =
+        cgroup_processes.into_iter().enumerate()
+            .map(|(cpu, proc)| -> anyhow::Result<_> {
+                let id = proc.id();
 
-            Ok(())
-        })?;
+                let proc = cgroup.assign_process(proc).map_err(|(_, err)| err)?;
+                proc.set_affinity(CpuSet::single(cpu as u32)?)?;
+                proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())?;
 
-    fifo_processes.iter().enumerate()
+                Ok(id)
+            })
+            .collect::<Result<Vec<_>, _>>()?;
+
+    fifo_processes.iter_mut().enumerate()
         .try_for_each(|(cpu, proc)| -> anyhow::Result<()> {
-            set_sched_policy(proc.id(), SchedPolicy::FIFO(50), SchedFlags::empty())?;
-            set_cpuset_to_pid(proc.id(), &CpuSet::single(cpu as u32)?)?;
+            proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())?;
+            proc.set_affinity(CpuSet::single(cpu as u32)?)?;
 
             Ok(())
         })?;
@@ -97,14 +102,8 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
 
     let mut cgroup_total_usage = 0f64;
     for proc in cgroup_processes.iter() {
-        cgroup_total_usage += get_process_total_cpu_usage(proc.id())?;
+        cgroup_total_usage += get_process_total_cpu_usage(*proc)?;
     }
-
-    fifo_processes.into_iter()
-        .try_for_each(|mut proc| proc.kill())?;
-
-    cgroup_processes.into_iter()
-        .try_for_each(|mut proc| proc.kill())?;
 
     cgroup.destroy()?;
 
