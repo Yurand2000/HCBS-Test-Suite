@@ -107,7 +107,7 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
             deadline_total_usage += get_process_total_cpu_usage(proc.id())?;
         }
 
-        cgroup.destroy()?;
+        cgroup.force_destroy();
 
         Ok((deadline_total_usage, cgroup_total_usage))
     };

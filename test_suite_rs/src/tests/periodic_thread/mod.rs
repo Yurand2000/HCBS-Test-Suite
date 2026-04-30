@@ -89,7 +89,7 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>, mult
     proc.wait()
         .map_err(|err| anyhow::format_err!("Error in waiting for periodic_thread: {err}"))?;
 
-    std::mem::drop(cgroup);
+    cgroup.force_destroy();
 
     let result = TasksetRunResult {
         taskset: run.taskset,
