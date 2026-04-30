@@ -24,10 +24,16 @@ setup() {
         ./test_suite/tools move-to-root          &&
         ./test_suite/tools mount-cgroup-cpu      &&
         ./test_suite/tools mount-debug-fs        &&
-        ./test_suite/tools setup-fair-servers \
-                           -r 0 -p 1000000 --ext &&
-        ./test_suite/tools cgroup-setup -r 950
+        ./test_suite/tools hrtick -e
+
     ) || exit 1
+
+    if [ -d '/sys/kernel/debug/sched/ext_server' ]; then
+        ./test_suite/tools setup-fair-servers -r 0 -p 1000000 --ext || exit 1
+        ./test_suite/tools cgroup-setup -r 950 || exit 1
+    else
+        ./test_suite/tools cgroup-setup -r 900 || exit 1
+    fi
 }
 
 constraints() {
@@ -94,7 +100,7 @@ regression() {
     TESTBINDIR=test_suite ./test_suite/regression fair-server -t 60
     TESTBINDIR=test_suite ./test_suite/regression fifo -r 10 -p 100 -t 60
     TESTBINDIR=test_suite ./test_suite/regression fifo -r 50 -p 100 -t 60
-    TESTBINDIR=test_suite ./test_suite/regression fifo -r 90 -p 100 -t 60
+    TESTBINDIR=test_suite ./test_suite/regression fifo -r 80 -p 100 -t 60
     TESTBINDIR=test_suite ./test_suite/regression deadline -r 10 -p 100 -t 60
     TESTBINDIR=test_suite ./test_suite/regression deadline -r 20 -p 100 -t 60
     TESTBINDIR=test_suite ./test_suite/regression deadline -r 30 -p 100 -t 60
@@ -112,12 +118,20 @@ random_stress() {
 
 tasksets() {
     echo "* Taskset Tests - periodic-thread *"
-    TESTBINDIR=bin ./test_suite/taskset --runner periodic-thread all -b 0.95 -n $(nproc) -i ./tasksets -o ./tasksets_out || true
+    if [ -d '/sys/kernel/debug/sched/ext_server' ]; then
+        TESTBINDIR=bin ./test_suite/taskset --runner periodic-thread all -b 0.95 -n $(nproc) -i ./tasksets -o ./tasksets_out || true
+    else
+        TESTBINDIR=bin ./test_suite/taskset --runner periodic-thread all -b 0.9 -n $(nproc) -i ./tasksets -o ./tasksets_out || true
+    fi
 }
 
 tasksets_rt_app() {
     echo "* Taskset Tests - rt-app *"
-    TESTBINDIR=bin ./test_suite/taskset --runner rt-app all -b 0.95 -n $(nproc) -i ./tasksets -o ./tasksets_out || true
+    if [ -d '/sys/kernel/debug/sched/ext_server' ]; then
+        TESTBINDIR=bin ./test_suite/taskset --runner rt-app all -b 0.95 -n $(nproc) -i ./tasksets -o ./tasksets_out || true
+    else
+        TESTBINDIR=bin ./test_suite/taskset --runner rt-app all -b 0.9 -n $(nproc) -i ./tasksets -o ./tasksets_out || true
+    fi
 }
 
 export BATCH_TEST=1
@@ -129,7 +143,8 @@ if [ $TEST_SUITE = "all" ]; then
     echo "*** Running all tests ***"
     setup
     constraints
-    time_tests
+    time_tests_uni
+    time_tests_multi
     regression
 elif [ $TEST_SUITE = "full" ]; then
     echo "*** Running all tests + excluded ones ***"

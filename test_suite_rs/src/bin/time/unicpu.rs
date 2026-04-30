@@ -114,5 +114,7 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippa
         procs.into_iter()
             .try_fold(0f64, |sum, proc| Ok::<f64, anyhow::Error>(sum + get_process_total_cpu_usage(proc)?))?;
 
+    cgroup.force_destroy();
+
     Ok(Skippable::Result(total_usage))
 }

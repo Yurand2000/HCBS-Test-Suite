@@ -57,7 +57,7 @@ fn set_runtime_zero_to_active(cgroup_name: &str) -> anyhow::Result<()> {
     yes.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty()).map_err(|err| err.into())
         .and_then(|_| cgroup.assign_process(yes).map(|_| ()).map_err(|(_, err)| err))?;
 
-    let failure = set_cgroup_runtime_us(cgroup_name, 0);
+    let failure = cgroup.set_runtime_us(0);
 
     if failure.is_ok() {
         anyhow::bail!("Cannot set runtime zero to cgroup with active tasks")
@@ -75,7 +75,7 @@ fn set_runtime_zero_to_active_multi(cgroup_name: &str) -> anyhow::Result<()> {
     yes.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty()).map_err(|err| err.into())
         .and_then(|_| cgroup.assign_process(yes).map(|_| ()).map_err(|(_, err)| err))?;
 
-    let failure = set_cgroup_runtime_us_multi_str(cgroup_name, "0 0");
+    let failure = cgroup.set_runtime_us_multi_str("0 0");
 
     if failure.is_ok() {
         anyhow::bail!("Cannot set runtime zero to cgroup with active tasks")
