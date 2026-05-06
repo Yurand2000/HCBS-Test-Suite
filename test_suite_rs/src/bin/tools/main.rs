@@ -43,7 +43,7 @@ pub enum Command {
     #[command(name = "chrt-deadline", verbatim_doc_comment)]
     ChrtDeadline(chrt::MyArgs),
 
-    /// CHRT process to SCHED_DEADLINE
+    /// Check if the multicpu feature of HCBS is available
     #[command(name = "check-multicpu", verbatim_doc_comment)]
     MultiCPUEnabled(()),
 }
