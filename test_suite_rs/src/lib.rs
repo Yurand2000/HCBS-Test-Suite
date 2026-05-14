@@ -15,6 +15,7 @@ pub mod prelude {
         NamedTaskset,
         NamedConfig,
         run_yes,
+        run_yes_pre_exec,
         cpu_hog,
         local_executable_cmd,
         is_multicpu_enabled,
@@ -33,6 +34,22 @@ pub struct NamedConfig {
     pub cpus: u64,
     pub runtime: Time,
     pub period: Time,
+}
+
+pub fn run_yes_pre_exec<F>(fun: F) -> anyhow::Result<HCBSProcess>
+    where F: FnMut() -> std::io::Result<()> + Send + Sync + 'static
+{
+    use std::process::*;
+    use std::os::unix::process::CommandExt as _;
+
+    let proc = unsafe { Command::new("yes")
+        .pre_exec(fun)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn() }?;
+
+    Ok(HCBSProcess::Child(proc))
 }
 
 pub fn cpu_hog() -> anyhow::Result<HCBSProcess> {

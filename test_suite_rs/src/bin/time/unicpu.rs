@@ -98,11 +98,19 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippa
     let procs =
         (0..args.num_tasks)
         .map(|_| -> anyhow::Result<Pid> {
-            let proc = cgroup.assign_process(run_yes()?).map_err(|(_, err)| err)?;
-            proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())?;
-            if cpu_set.is_some() {
-                proc.set_affinity(cpu_set.clone().unwrap())?;
-            }
+            let cpu_set = cpu_set.clone();
+            let proc = run_yes_pre_exec(move || {
+                let mut proc = HCBSProcess::SelfProc;
+
+                proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())
+                    .map_err(|_| std::io::Error::last_os_error())?;
+
+                let Some(cpu_set) = cpu_set.clone() else { return Ok(()); };
+
+                proc.set_affinity(cpu_set)
+                    .map_err(|_| std::io::Error::last_os_error())
+            })?;
+            let proc = cgroup.assign_process(proc).map_err(|(_, err)| err)?;
 
             Ok(proc.id())
         })
