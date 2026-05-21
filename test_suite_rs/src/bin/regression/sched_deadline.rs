@@ -64,8 +64,8 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
         let cpus = CpuSet::all()?.num_cpus();
         let mut cgroup = HCBSCgroup::new(&args.cgroup)?
             .with_force_kill(false);
-        cgroup.set_period_us(args.period_ms * 1000)?;
-        cgroup.set_runtime_us(args.runtime_ms * 1000)?;
+        cgroup.set_cpu_bw_us(args.runtime_ms * 1000, args.period_ms * 1000)?;
+
         let dl_runtime_ms = args.period_ms * 4 / 10;
 
         let mut dl_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
@@ -123,14 +123,19 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
 }
 
 fn reduce_cgroups_runtime() -> anyhow::Result<u64> {
-    let rt_runtime = get_cgroup_runtime_us(".")?;
-    let rt_period = get_cgroup_period_us(".")?;
-    set_cgroup_runtime_us(".", rt_period * 5 / 10)?;
+    let (Either::Left(rt_runtime), rt_period) = get_cgroup_us(".")?
+        else { unreachable!() };
+
+    set_cgroup_us(".", Either::Left(rt_period * 5 / 10), rt_period)?;
     Ok(rt_runtime)
 }
 
 fn restore_cgroups_runtime(rt_runtime_us: u64) -> anyhow::Result<()> {
     std::thread::sleep(std::time::Duration::from_millis(100));
 
-    set_cgroup_runtime_us(".", rt_runtime_us)
+    let (Either::Left(_), rt_period) = get_cgroup_us(".")?
+        else { unreachable!() };
+
+    set_cgroup_us(".", Either::Left(rt_runtime_us), rt_period)?;
+    Ok(())
 }

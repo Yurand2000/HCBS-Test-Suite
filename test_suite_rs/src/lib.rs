@@ -92,18 +92,5 @@ pub fn local_executable_cmd(def_dir: &str, name: &str) -> anyhow::Result<String>
 }
 
 pub fn is_multicpu_enabled() -> anyhow::Result<bool> {
-    mount_cgroup_cpu()?;
-
-    let name = "multicpu_test_cgroup";
-    if cgroup_exists(name) {
-        return Ok(false);
-    }
-
-    let mut cgroup = HCBSCgroup::new(name)?
-        .with_force_kill(false);
-
-    match cgroup.set_period_us_multi_str("100000 1") {
-        Ok(_) => Ok(true),
-        Err(_) => Ok(false),
-    }
+    Ok(false)
 }

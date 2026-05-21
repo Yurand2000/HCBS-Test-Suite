@@ -66,8 +66,7 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
     let cpus = CpuSet::all()?.num_cpus();
     let mut cgroup = HCBSCgroup::new(&args.cgroup)?
         .with_force_kill(false);
-    cgroup.set_period_us(args.period_ms * 1000)?;
-    cgroup.set_runtime_us(args.runtime_ms * 1000)?;
+    cgroup.set_cpu_bw_us(args.runtime_ms * 1000, args.period_ms * 1000)?;
 
     let mut fifo_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
     let cgroup_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;

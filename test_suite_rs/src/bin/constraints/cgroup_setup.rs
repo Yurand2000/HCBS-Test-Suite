@@ -4,9 +4,7 @@ use hcbs_test_suite::prelude::*;
 fn cgroup_setup_fail(cgroup_name: &str, runtime_us: u64, period_us: u64) -> anyhow::Result<()> {
     let mut cgroup = HCBSCgroup::new(cgroup_name)?;
 
-    let failure: Result<(), _> =
-        cgroup.set_period_us(period_us)
-            .and_then(|_| cgroup.set_runtime_us(runtime_us));
+    let failure: Result<(), _> = cgroup.set_cpu_bw_us(runtime_us, period_us);
 
     if failure.is_ok() {
         anyhow::bail!("Cgroup \'{cgroup_name}\' creation with {runtime_us}/{period_us} did not fail")
@@ -18,9 +16,7 @@ fn cgroup_setup_fail(cgroup_name: &str, runtime_us: u64, period_us: u64) -> anyh
 fn cgroup_setup_fail_multi(cgroup_name: &str, runtimes_us: &str, periods_us: &str) -> anyhow::Result<()> {
     let mut cgroup = HCBSCgroup::new(cgroup_name)?;
 
-    let failure: Result<(), _> =
-        cgroup.set_period_us_multi_str(periods_us)
-            .and_then(|_| cgroup.set_runtime_us_multi_str(runtimes_us));
+    let failure: anyhow::Result<()> = unimplemented!("Cannot set multiCPU bandwidth");
 
     if failure.is_ok() {
         anyhow::bail!("Cgroup \'{cgroup_name}\' creation with {runtimes_us:?}/{periods_us:?} did not fail")
@@ -31,8 +27,7 @@ fn cgroup_setup_fail_multi(cgroup_name: &str, runtimes_us: &str, periods_us: &st
 
 fn add_task_to_runtime_zero(cgroup_name: &str) -> anyhow::Result<()> {
     let mut cgroup = HCBSCgroup::new(cgroup_name)?;
-    cgroup.set_period_us(100_000)?;
-    cgroup.set_runtime_us(0)?;
+    cgroup.set_cpu_bw_us(0, 100_000)?;
 
     let mut yes = run_yes()?;
 
@@ -49,15 +44,14 @@ fn add_task_to_runtime_zero(cgroup_name: &str) -> anyhow::Result<()> {
 
 fn set_runtime_zero_to_active(cgroup_name: &str) -> anyhow::Result<()> {
     let mut cgroup = HCBSCgroup::new(cgroup_name)?;
-    cgroup.set_period_us(100_000)?;
-    cgroup.set_runtime_us(10_000)?;
+    cgroup.set_cpu_bw_us(10_000, 100_000)?;
 
     let mut yes = run_yes()?;
 
     yes.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty()).map_err(|err| err.into())
         .and_then(|_| cgroup.assign_process(yes).map(|_| ()).map_err(|(_, err)| err))?;
 
-    let failure = cgroup.set_runtime_us(0);
+    let failure = cgroup.set_cpu_bw_us(0, 100_000);
 
     if failure.is_ok() {
         anyhow::bail!("Cannot set runtime zero to cgroup with active tasks")
@@ -68,14 +62,14 @@ fn set_runtime_zero_to_active(cgroup_name: &str) -> anyhow::Result<()> {
 
 fn set_runtime_zero_to_active_multi(cgroup_name: &str) -> anyhow::Result<()> {
     let mut cgroup = HCBSCgroup::new(cgroup_name)?;
-    cgroup.set_period_us(100_000)?;
-    cgroup.set_runtime_us_multi_str("10000 0")?;
+    cgroup.set_cpu_bw_us(0, 100_000)?;
+    unimplemented!("Cannot set multiCPU bandwidth");
 
     let mut yes = run_yes()?;
     yes.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty()).map_err(|err| err.into())
         .and_then(|_| cgroup.assign_process(yes).map(|_| ()).map_err(|(_, err)| err))?;
 
-    let failure = cgroup.set_runtime_us_multi_str("0 0");
+    let failure: anyhow::Result<()> = unimplemented!("Cannot set multiCPU bandwidth");
 
     if failure.is_ok() {
         anyhow::bail!("Cannot set runtime zero to cgroup with active tasks")

@@ -25,20 +25,20 @@ pub fn main(args: MyArgs) -> anyhow::Result<()> {
 
     mount_cgroup_cpu()?;
 
+    let (old_runtime_us, old_period_us) = get_cgroup_us(&args.cgroup)?;
+
     let runtime_us = match args.bw.runtime_ms {
-        Some(ms) => ms * 1000,
-        None => get_cgroup_runtime_us(&args.cgroup)?,
+        Some(ms) => Either::Left(ms * 1000),
+        None => old_runtime_us,
     };
 
     let period_us = match args.bw.period_ms {
         Some(ms) => ms * 1000,
-        None => get_cgroup_period_us(&args.cgroup)?,
+        None => old_period_us,
     };
 
     create_cgroup(&args.cgroup)?;
-    set_cgroup_runtime_us(&args.cgroup, 0)?;
-    set_cgroup_period_us(&args.cgroup, period_us)?;
-    set_cgroup_runtime_us(&args.cgroup, runtime_us)?;
+    set_cgroup_us(&args.cgroup, runtime_us, period_us)?;
 
     Ok(())
 }

@@ -14,7 +14,7 @@ sysconf = "0.3.4"
 crossbeam = "0.8.4"
 eva-rt-common = "0.1.1"
 eva-rt-engine = { git = "https://github.com/Yurand2000/EVA-rt-Engine" }
-hcbs-utils = { git = "https://github.com/Yurand2000/hcbs-utils.git" }
+hcbs-utils = { git = "https://github.com/Yurand2000/hcbs-utils.git", branch = "cpu-rt-max" }
 env_logger = "0.11.10"
 log = "0.4.29"
 

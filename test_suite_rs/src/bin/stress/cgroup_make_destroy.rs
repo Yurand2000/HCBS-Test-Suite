@@ -44,8 +44,7 @@ pub fn main(args: MyArgs, rng: Option<&mut dyn rand::Rng>, ctrlc_flag: Option<Ex
             let runtime_ms = rng.random_range(args.runtime_min_ms ..= args.runtime_max_ms);
             let mut cgroup = HCBSCgroup::new(&args.cgroup)?
                 .with_force_kill(true);
-            cgroup.set_period_us(args.period_ms * 1000)?;
-            cgroup.set_runtime_us(runtime_ms * 1000)?;
+            cgroup.set_cpu_bw_us(runtime_ms * 1000, args.period_ms * 1000)?;
 
             cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?
                 .set_sched_policy(SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;

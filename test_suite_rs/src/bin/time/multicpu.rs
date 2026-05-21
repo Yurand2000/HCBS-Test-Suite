@@ -104,8 +104,7 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippa
 
     let mut cgroup = HCBSCgroup::new(&args.cgroup)?
         .with_force_kill(true);
-    cgroup.set_period_us_multi(cgroup_periods_us)?;
-    cgroup.set_runtime_us_multi(cgroup_runtimes_us)?;
+    unimplemented!("Cannot set multiCPU bandwidth");
 
     cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?
         .set_sched_policy(SchedPolicy::RR(99), SchedFlags::empty())?;

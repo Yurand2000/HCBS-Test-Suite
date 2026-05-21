@@ -115,8 +115,9 @@ pub fn can_run_taskset(run: &TasksetRun, args: &RunnerArgsBase) -> bool {
 
 pub fn check_root_cgroup(args: &RunnerArgsBase) -> anyhow::Result<()> {
     mount_cgroup_cpu()?;
-    let cgroup_period = get_cgroup_period_us(".")?;
-    let cgroup_runtime = get_cgroup_runtime_us(".")?;
+    let (Either::Left(cgroup_runtime), cgroup_period) = get_cgroup_us(".")?
+        else { anyhow::bail!("Root cgroup cannot return 'max' as runtime") };
+
     let cgroup_bw = cgroup_runtime as f64 / cgroup_period as f64;
     if cgroup_bw < args.max_allocable_bw {
         anyhow::bail!("Cannot run tasksets as the maximum allocable bandwidth is {cgroup_bw}, \
