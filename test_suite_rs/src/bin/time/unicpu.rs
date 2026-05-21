@@ -77,7 +77,7 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippa
         .map(|cpu_set| cpu_set.try_into())
         .transpose();
 
-    let cpu_set =
+    let cpu_set: Option<CpuSet> =
         match cpu_set {
             Err(err @ CpuSetBuildError::UnavailableCPU(_)) =>
                 { return Ok(Skippable::Skipped(err.into())); },
@@ -93,21 +93,19 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippa
     cgroup.set_runtime_us(args.runtime_ms * 1000)?;
 
     cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?
-        .set_sched_policy(SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
+        .set_sched_policy(SchedPolicy::RR(99), SchedFlags::empty())?;
 
     let procs =
         (0..args.num_tasks)
         .map(|_| -> anyhow::Result<Pid> {
             let cpu_set = cpu_set.clone();
             let proc = run_yes_pre_exec(move || {
-                let mut proc = HCBSProcess::SelfProc;
-
-                proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())
+                set_sched_policy(0, SchedPolicy::RR(50), SchedFlags::empty())
                     .map_err(|_| std::io::Error::last_os_error())?;
 
                 let Some(cpu_set) = cpu_set.clone() else { return Ok(()); };
 
-                proc.set_affinity(cpu_set)
+                set_cpuset_to_pid(0, &cpu_set)
                     .map_err(|_| std::io::Error::last_os_error())
             })?;
             let proc = cgroup.assign_process(proc).map_err(|(_, err)| err)?;

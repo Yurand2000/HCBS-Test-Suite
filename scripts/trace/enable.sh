@@ -1,6 +1,6 @@
 #!/bin/sh
 
-/root/test_suite/tools cgroup-setup -r 850
+/root/test_suite/tools cgroup-setup -r 900 || exit 1
 /root/test_suite/tools mount-debug-fs || exit 1
 sh /root/utils/mount_virtfs.sh host0 /tmp/host0
 sh /root/utils/mount_virtfs.sh build /tmp/build

@@ -64,6 +64,13 @@ time_tests_multi() {
         ./test_suite/time multi -n 5 -C 20/100/0-3 -t 10
     BATCH_TEST_CUSTOM_NAME="five-tasks-eight-cpus" \
         ./test_suite/time multi -n 5 -C 10/100/0-7 -t 10
+
+    BATCH_TEST_CUSTOM_NAME="five-tasks-multi-cpu-00" \
+        ./test_suite/time multi -n 5 -C 20/100/0 30/100/1 -t 10
+    BATCH_TEST_CUSTOM_NAME="ten-tasks-multi-cpu-01" \
+        ./test_suite/time multi -n 10 -C 20/100/0,2 10/100/1,3 -t 10
+    BATCH_TEST_CUSTOM_NAME="ten-tasks-multi-cpu-02" \
+        ./test_suite/time multi -n 10 -C 20/100/0,3 10/100/2 -t 10
 }
 
 time_tests_uni() {
