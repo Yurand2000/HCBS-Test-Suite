@@ -17,14 +17,15 @@ eva-rt-engine = { git = "https://github.com/Yurand2000/EVA-rt-Engine" }
 hcbs-utils = { git = "https://github.com/Yurand2000/hcbs-utils.git", branch = "cpu-rt-max" }
 env_logger = "0.11.10"
 log = "0.4.29"
+graphviz-rust = "0.9.8"
 
 [[bin]]
 name = "regression"
 path = "src/bin/regression/main.rs"
 
 [[bin]]
-name = "constraints_cgroup_setup"
-path = "src/bin/constraints/cgroup_setup.rs"
+name = "constraints"
+path = "src/bin/constraints/main.rs"
 
 [[bin]]
 name = "stress"

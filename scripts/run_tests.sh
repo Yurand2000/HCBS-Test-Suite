@@ -38,7 +38,8 @@ setup() {
 
 constraints() {
     echo "* Constraints Tests *"
-    ./test_suite/constraints_cgroup_setup
+    ./test_suite/constraints cgroup-setup
+    ./test_suite/constraints cgroup-hierarchy ./graphs/test00.dot
 }
 
 time_tests_multi() {

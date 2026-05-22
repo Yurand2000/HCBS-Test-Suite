@@ -78,11 +78,7 @@ fn set_runtime_zero_to_active_multi(cgroup_name: &str) -> anyhow::Result<()> {
     }
 }
 
-fn main() -> anyhow::Result<()> {
-    env_logger::init();
-
-    mount_cgroup_cpu()?;
-
+pub fn main() -> anyhow::Result<()> {
     assign_pid_to_cgroup(".", std::process::id())?;
     set_sched_policy(std::process::id(), SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
 
