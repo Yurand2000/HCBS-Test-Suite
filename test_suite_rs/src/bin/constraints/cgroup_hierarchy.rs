@@ -40,12 +40,14 @@ pub fn main(args: MyArgs) -> anyhow::Result<()> {
 pub struct HCBSNode {
     id: String,
     runtime: Either<u64, Max>,
+    internal: u64,
     period: u64,
     children: Vec<HCBSNode>,
 }
 
 fn test_hcbs_graph(graph: &HCBSNode) -> anyhow::Result<()> {
     create_hcbs_graph(graph, "")?;
+    test_internal_runtime_hcbs_graph(graph, "")?;
     destroy_hcbs_graph(graph, "")?;
 
     Ok(())
@@ -73,6 +75,28 @@ fn create_hcbs_graph(graph: &HCBSNode, parent: &str) -> anyhow::Result<()> {
         delete_cgroup(&name)?;
     }
     err
+}
+
+fn test_internal_runtime_hcbs_graph(graph: &HCBSNode, parent: &str) -> anyhow::Result<()> {
+    let name =
+        if parent == "" {
+            return Ok(());
+        } else {
+            format!("{}/{}", parent, graph.id)
+        };
+
+    let file = format!("/sys/fs/cgroup/{name}/cpu.rt.internal");
+
+    let internal =
+        std::fs::read_to_string(&file)
+        .map_err(|err| anyhow::format_err!("Error in reading file {file}: {err}"))
+        .and_then(|data| data.parse::<u64>().map_err(|err| anyhow::format_err!("Error in parsing file {file}: {err}")))?;
+
+    if graph.internal != internal {
+        anyhow::bail!("Expected internal runtime for node {} to be {}, got {}", graph.id, graph.internal, internal);
+    }
+
+    Ok(())
 }
 
 fn destroy_hcbs_graph(graph: &HCBSNode, parent: &str) -> anyhow::Result<()> {
@@ -116,6 +140,7 @@ fn parse_hcbs_graph(dot: &str) -> anyhow::Result<HCBSNode> {
     #[derive(Debug)]
     struct HCBSNodeTmp {
         runtime: Either<u64, Max>,
+        internal: u64,
         period: u64,
         parent: Option<String>,
         children: HashSet<String>,
@@ -125,6 +150,7 @@ fn parse_hcbs_graph(dot: &str) -> anyhow::Result<HCBSNode> {
         .map(|node| {
             let id = node.id.0.to_string();
             let mut runtime = None;
+            let mut internal = None;
             let mut period = None;
 
             for Attribute(key, value) in node.attributes {
@@ -139,6 +165,8 @@ fn parse_hcbs_graph(dot: &str) -> anyhow::Result<HCBSNode> {
                     }
                 } else if key == "period" {
                     period = Some(value.parse::<u64>()? * 1000);
+                } else if key == "internal" {
+                    internal = Some(value.parse::<u64>()? * 1000);
                 }
             }
 
@@ -148,8 +176,12 @@ fn parse_hcbs_graph(dot: &str) -> anyhow::Result<HCBSNode> {
             let Some(period) = period
                 else { anyhow::bail!("Expected period for node {id}") };
 
+            let Some(internal) = internal
+                else { anyhow::bail!("Expected internal for node {id}") };
+
             Ok((id, HCBSNodeTmp {
                 runtime,
+                internal,
                 period,
                 parent: None,
                 children: HashSet::new(),
@@ -200,6 +232,7 @@ fn parse_hcbs_graph(dot: &str) -> anyhow::Result<HCBSNode> {
         frontier.insert(id.clone(), HCBSNode {
             id: id,
             runtime: node.runtime,
+            internal: node.internal,
             period: node.period,
             children: Vec::new(),
         });
@@ -213,6 +246,7 @@ fn parse_hcbs_graph(dot: &str) -> anyhow::Result<HCBSNode> {
         let new_node = HCBSNode {
             id: new_id.clone(),
             runtime: new_node.runtime,
+            internal: new_node.internal,
             period: new_node.period,
             children: frontier
                 .extract_if(|id, _| new_node.children.contains(id))

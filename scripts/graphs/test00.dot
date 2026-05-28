@@ -1,21 +1,21 @@
 strict digraph G {
-  root [runtime = 900, period = 1000, label = "root: 90/100"]
-  g0 [runtime = max, period = 100, label = "g0: max"]
-  g1 [runtime = 20, period = 100, label = "g1: 20/100"]
-  g2 [runtime = max, period = 100, label = "g2: max"]
-  g3 [runtime = max, period = 100, label = "g3: max"]
-  g4 [runtime = 30, period = 100, label = "g4: 30/100"]
-  g5 [runtime = 10, period = 100, label = "g5: 10/100"]
-  g6 [runtime = 40, period = 100, label = "g6: 40/100"]
-  g7 [runtime = max, period = 100, label = "g7: max"]
-  g8 [runtime = 5, period = 100, label = "g8: 5/100"]
-  g9 [runtime = 15, period = 100, label = "g9: 15/100"]
-  g10 [runtime = max, period = 100, label = "g10: max"]
+    root [runtime = 900, period = 1000, internal = 0,  label = "root: 90/100"]
+    g0   [runtime = max, period = 100,  internal = 0,  label = "g0: max"]
+    g1   [runtime = 20,  period = 100,  internal = 10, label = "g1: 20/100"]
+    g2   [runtime = max, period = 100,  internal = 0,  label = "g2: max"]
+    g3   [runtime = max, period = 100,  internal = 0,  label = "g3: max"]
+    g4   [runtime = 30,  period = 100,  internal = 30, label = "g4: 30/100"]
+    g5   [runtime = 10,  period = 100,  internal = 10, label = "g5: 10/100"]
+    g6   [runtime = 40,  period = 100,  internal = 20, label = "g6: 40/100"]
+    g7   [runtime = max, period = 100,  internal = 0,  label = "g7: max"]
+    g8   [runtime = 5,   period = 100,  internal = 5,  label = "g8: 5/100"]
+    g9   [runtime = 15,  period = 100,  internal = 15, label = "g9: 15/100"]
+    g10  [runtime = max, period = 100,  internal = 0,  label = "g10: max"]
 
-  root -> g0 -> g1 -> g2
-  g0 -> g3 -> g4
-  g1 -> g5
-  g0 -> g6 -> g7
-  g6 -> g8 -> g10
-  g6 -> g9
+    root -> g0 -> g1 -> g2
+    g0 -> g3 -> g4
+    g1 -> g5
+    g0 -> g6 -> g7
+    g6 -> g8 -> g10
+    g6 -> g9
 }
