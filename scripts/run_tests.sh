@@ -21,7 +21,6 @@ setup() {
     echo "* Preliminary Setup *"
     (
         ./test_suite/tools mount-cgroup-fs       &&
-        ./test_suite/tools move-to-root          &&
         ./test_suite/tools mount-cgroup-cpu      &&
         ./test_suite/tools mount-debug-fs        &&
         ./test_suite/tools hrtick -e
