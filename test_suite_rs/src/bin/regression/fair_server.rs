@@ -41,23 +41,25 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 }
 
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<f64> {
-    let cpus = CpuSet::all()?.num_cpus();
+    let cpus = pid::CpuSet::online_cpus();
 
-    assign_pid_to_cgroup(".", std::process::id())?;
-    set_sched_policy(std::process::id(), SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
+    let self_id = Pid(std::process::id());
+
+    assign_pid_to_cgroup(".", self_id)?;
+    pid::set_sched_policy(self_id, pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
 
     let mut fifo_processes = (0..cpus).map(|_| cpu_hog()).collect::<Result<Vec<_>, _>>()?;
     let mut non_fifo_processes = (0..cpus).map(|_| cpu_hog()).collect::<Result<Vec<_>, _>>()?;
 
     non_fifo_processes.iter_mut()
         .enumerate()
-        .try_for_each(|(i, proc)| proc.set_affinity(CpuSet::single(i as u32)?))?;
+        .try_for_each(|(i, proc)| proc.set_affinity(pid::CpuSet::single(CpuID(i as u32))))?;
 
     fifo_processes.iter_mut()
         .enumerate()
         .try_for_each::<_, anyhow::Result<_>>(|(i, proc)| {
-            proc.set_affinity(CpuSet::single(i as u32)?)?;
-            proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())?;
+            proc.set_affinity(pid::CpuSet::single(CpuID(i as u32)))?;
+            proc.set_sched_policy(pid::SchedPolicy::RR(50), pid::SchedFlags::empty())?;
 
             Ok(())
         })?;

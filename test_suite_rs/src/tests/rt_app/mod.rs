@@ -66,18 +66,17 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>, mult
         config_file
     )?;
 
-    let cpu_set = CpuSet::any_subset(run.config.cpus)?;
+    let cpu_set = pid::CpuSet::online()?.any_subset(run.config.cpus)?;
     let mut cgroup = HCBSCgroup::new(&args.cgroup)?
         .with_force_kill(true);
     if !multi_runtime  {
-        cgroup.set_cpu_bw_us(run.config.runtime.as_micros() as u64,
-                             run.config.period.as_micros() as u64)?;
+        cgroup.set_cgroup_us(run.config.runtime, run.config.period)?;
     } else {
         unimplemented!("Cannot set multiCPU bandwidth");
     }
 
     let self_proc = cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?;
-    self_proc.set_sched_policy(SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
+    self_proc.set_sched_policy(pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
     if !multi_runtime  {
         self_proc.set_affinity(cpu_set)?;
     }
@@ -102,19 +101,21 @@ fn compute_cpu_speed() -> anyhow::Result<u64> {
     let config_file = "/tmp/rt-app-config.json";
     let stdout_file = "/tmp/rt-app-calibration.txt";
 
+    let self_id = Pid(std::process::id());
+
     config_generator::generate_calibration_config(config_file)?;
 
     // run rt-app to calibrate
-    assign_pid_to_cgroup(".", std::process::id())?;
-    set_sched_policy(std::process::id(), SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
-    set_cpuset_to_pid(std::process::id(), &CpuSet::any_subset(1)?)?;
+    assign_pid_to_cgroup(".", self_id)?;
+    pid::set_sched_policy(self_id, pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
+    pid::set_cpuset_to_pid(self_id, &pid::CpuSet::online()?.any_subset(1)?)?;
 
     let mut proc = run_rt_app(config_file, stdout_file)?;
     proc.wait()
         .map_err(|err| anyhow::format_err!("Error in waiting for rt-app: {err}"))?;
 
-    set_cpuset_to_pid(std::process::id(), &CpuSet::all()?)?;
-    set_sched_policy(std::process::id(), SchedPolicy::other(), SchedFlags::RESET_ON_FORK)?;
+    pid::set_cpuset_to_pid(self_id, &pid::CpuSet::online()?)?;
+    pid::set_sched_policy(self_id, pid::SchedPolicy::other(), pid::SchedFlags::RESET_ON_FORK)?;
 
     // read calibration results
     let out_data = std::fs::read_to_string(&stdout_file)

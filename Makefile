@@ -29,7 +29,8 @@ cgroup: $(BUILD)/cgroup.keep
 RUSTFLAGS="-C target-feature=+crt-static"
 $(BUILD)/cgroup.keep: $(BUILD)/mnt/.keep $(BUILD)/.keep
 	mkdir -p $(BUILD)/test_suite
-	RUSTFLAGS=$(RUSTFLAGS) \
+	cd test_suite_rs && \
+		RUSTFLAGS=$(RUSTFLAGS) \
 		cargo build --release --target x86_64-unknown-linux-gnu \
 		--target-dir "$(BUILD)/test_suite"
 
@@ -44,6 +45,7 @@ tasksets: $(BUILD)/mnt/root/tasksets/.keep
 
 .PRECIOUS: $(BUILD)/mnt/root/tasksets/.keep
 $(BUILD)/mnt/root/tasksets/.keep: $(BUILD)/.keep
+	cd test_suite_rs && \
 	cargo run --bin taskset_gen --release \
 	--target-dir "$(BUILD)/test_suite" -- -O $(BUILD)/mnt/root/tasksets
 	touch $@

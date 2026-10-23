@@ -72,7 +72,11 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 }
 
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippable<f64>> {
+    use libtux::pid::cpuset::CpuSetBuildError;
+
     assert!(args.config.len() >= 1);
+
+    let online_cpus = pid::CpuSet::online()?;
 
     // run the tasks
     let mut cgroup_runtimes_us: HashMap<u64, HashSet<CpuID>> = HashMap::new();
@@ -84,8 +88,9 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippa
         let cpu_set: HashSet<_> = cpu_set.into_iter().collect();
 
         for &cpu in cpu_set.iter() {
-            if let Err(err) = CpuSet::single(cpu) {
-                return Ok(Skippable::Skipped(err.into()));
+            let cpuset = pid::CpuSet::single(cpu);
+            if cpuset.is_subset(&online_cpus) {
+                return Ok(Skippable::Skipped(CpuSetBuildError::UnavailableCPUs.into()));
             }
         }
 
@@ -107,13 +112,13 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippa
     unimplemented!("Cannot set multiCPU bandwidth");
 
     cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?
-        .set_sched_policy(SchedPolicy::RR(99), SchedFlags::empty())?;
+        .set_sched_policy(pid::SchedPolicy::RR(99), pid::SchedFlags::empty())?;
 
     let procs =
         (0..args.num_tasks)
         .map(|_| -> anyhow::Result<Pid> {
             let proc = run_yes_pre_exec(|| {
-                set_sched_policy(0, SchedPolicy::RR(50), SchedFlags::empty())
+                pid::set_sched_policy(Pid(0), pid::SchedPolicy::RR(50), pid::SchedFlags::empty())
                     .map_err(|_| std::io::Error::last_os_error())
             })?;
             let proc = cgroup.assign_process(proc).map_err(|(_, err)| err)?;
@@ -137,7 +142,7 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippa
 pub struct CgroupConfigSet {
     runtime_ms: u64,
     period_ms: u64,
-    cpu_set: CpuSetUnchecked,
+    cpu_set: pid::CpuSet,
 }
 
 impl CgroupConfigSet {
@@ -155,7 +160,7 @@ impl CgroupConfigSet {
 
         let cpu_set = || {
             recognize(many1(one_of("0123456789-,")))
-                .map_res(|str: &str| CpuSetUnchecked::from_str(str))
+                .map_res(|str: &str| pid::CpuSet::from_str(str))
         };
 
         map(

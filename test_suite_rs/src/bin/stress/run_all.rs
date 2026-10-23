@@ -45,7 +45,7 @@ impl rand::distr::Distribution<TestType> for rand::distr::StandardUniform {
 }
 
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<()> {
-    unsafe { set_batch_test(); }
+    set_batch_test();
 
     let ctrlc_flag = match ctrlc_flag {
         Some(exit) => exit,

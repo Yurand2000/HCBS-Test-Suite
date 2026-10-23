@@ -44,15 +44,17 @@ pub fn main(args: MyArgs, rng: Option<&mut dyn rand::Rng>, ctrlc_flag: Option<Ex
             let runtime_ms = rng.random_range(args.runtime_min_ms ..= args.runtime_max_ms);
             let mut cgroup = HCBSCgroup::new(&args.cgroup)?
                 .with_force_kill(true);
-            cgroup.set_cpu_bw_us(runtime_ms * 1000, args.period_ms * 1000)?;
+            cgroup.set_cgroup_us(
+                Time::millis(runtime_ms as f64),
+                Time::millis(args.period_ms as f64))?;
 
             cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?
-                .set_sched_policy(SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
+                .set_sched_policy(pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
 
             let num_procs = rng.random_range(1..=5);
             for _ in 0 .. num_procs {
                 let proc = cgroup.assign_process(run_yes()?).map_err(|(_, err)| err)?;
-                proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())?;
+                proc.set_sched_policy(pid::SchedPolicy::RR(50), pid::SchedFlags::empty())?;
             }
 
             std::thread::sleep(std::time::Duration::from_secs_f32(rng.random_range(0.5f32..=2f32)));

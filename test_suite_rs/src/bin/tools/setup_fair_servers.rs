@@ -46,10 +46,12 @@ fn setup_servers(runtime_us: u64, period_us: u64, ext_servers: bool) -> anyhow::
 }
 
 pub fn main(args: MyArgs) -> anyhow::Result<()> {
-    mount_debug_fs()?;
+     mount_debug_fs()?;
 
-    assign_pid_to_cgroup(".", std::process::id())?;
-    set_sched_policy(std::process::id(), SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
+    let self_id = Pid(std::process::id());
+
+    assign_pid_to_cgroup(".", self_id)?;
+    pid::set_sched_policy(self_id, pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
 
     setup_servers(
         args.runtime_us,

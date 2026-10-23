@@ -1,7 +1,6 @@
 use std::collections::{HashMap, HashSet};
 
-use hcbs_utils::prelude::*;
-use hcbs_test_suite::utils::*;
+use hcbs_test_suite::prelude::*;
 use graphviz_rust::dot_structures::*;
 
 #[derive(clap::Parser, Debug)]
@@ -39,9 +38,9 @@ pub fn main(args: MyArgs) -> anyhow::Result<()> {
 #[derive(Debug)]
 pub struct HCBSNode {
     id: String,
-    runtime: Either<u64, Max>,
-    internal: u64,
-    period: u64,
+    runtime: HCBSTime,
+    period: HCBSTime,
+    internal: Time,
     children: Vec<HCBSNode>,
 }
 
@@ -63,7 +62,7 @@ fn create_hcbs_graph(graph: &HCBSNode, parent: &str) -> anyhow::Result<()> {
 
     create_cgroup(&name)?;
     let err = {
-        set_cgroup_us(&name, graph.runtime, graph.period)?;
+        set_cgroup(&name, graph.runtime, graph.period)?;
         for child in graph.children.iter() {
             create_hcbs_graph(child, &name)?;
         }
@@ -90,7 +89,8 @@ fn test_internal_runtime_hcbs_graph(graph: &HCBSNode, parent: &str) -> anyhow::R
     let internal =
         std::fs::read_to_string(&file)
         .map_err(|err| anyhow::format_err!("Error in reading file {file}: {err}"))
-        .and_then(|data| data.parse::<u64>().map_err(|err| anyhow::format_err!("Error in parsing file {file}: {err}")))?;
+        .and_then(|data| data.parse::<u64>().map_err(|err| anyhow::format_err!("Error in parsing file {file}: {err}")))
+        .map(|time| Time::micros(time as f64))?;
 
     if graph.internal != internal {
         anyhow::bail!("Expected internal runtime for node {} to be {}, got {}", graph.id, graph.internal, internal);
@@ -139,9 +139,9 @@ fn parse_hcbs_graph(dot: &str) -> anyhow::Result<HCBSNode> {
 
     #[derive(Debug)]
     struct HCBSNodeTmp {
-        runtime: Either<u64, Max>,
-        internal: u64,
-        period: u64,
+        runtime: HCBSTime,
+        period: HCBSTime,
+        internal: Time,
         parent: Option<String>,
         children: HashSet<String>,
     }
@@ -159,14 +159,14 @@ fn parse_hcbs_graph(dot: &str) -> anyhow::Result<HCBSNode> {
 
                 if key == "runtime" {
                     if value == "max" {
-                        runtime = Some(Either::Right(Max));
+                        runtime = Some(HCBSTime::Max);
                     } else {
-                        runtime = Some(Either::Left(value.parse::<u64>()? * 1000));
+                        runtime = Some(HCBSTime::Time(Time::millis(value.parse::<f64>()?)));
                     }
                 } else if key == "period" {
-                    period = Some(value.parse::<u64>()? * 1000);
+                    period = Some(HCBSTime::Time(Time::millis(value.parse::<f64>()?)));
                 } else if key == "internal" {
-                    internal = Some(value.parse::<u64>()? * 1000);
+                    internal = Some(Time::millis(value.parse::<f64>()?));
                 }
             }
 
@@ -181,8 +181,8 @@ fn parse_hcbs_graph(dot: &str) -> anyhow::Result<HCBSNode> {
 
             Ok((id, HCBSNodeTmp {
                 runtime,
-                internal,
                 period,
+                internal,
                 parent: None,
                 children: HashSet::new(),
             }))

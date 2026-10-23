@@ -20,11 +20,11 @@ pub struct MyArgs {
 }
 
 pub fn main(args: MyArgs) -> anyhow::Result<()> {
-    set_sched_policy(args.pid, SchedPolicy::DEADLINE {
+    pid::set_sched_policy(Pid(args.pid), pid::SchedPolicy::DEADLINE {
         runtime_ms: args.runtime_ms,
         deadline_ms: args.deadline_ms,
         period_ms: args.period_ms,
-    }, SchedFlags::RESET_ON_FORK)?;
+    }, pid::SchedFlags::RESET_ON_FORK)?;
 
     Ok(())
 }

@@ -56,14 +56,18 @@ pub fn generate_tasksets(
                             * period_step + period_min
                         ).floor();
 
-                    RTTask {
+                    LLTask {
                         wcet: (util * period).floor(),
                         deadline: period,
                         period: period,
                     }
                 }).collect();
 
-            tasks.sort_by_key(|task| task.period);
+            tasks.sort_by_key(|task| std::cmp::Reverse(task.period));
+
+            let tasks = tasks.into_iter().enumerate()
+                .map(|(priority, task)| PriorityTask { task, priority } )
+                .collect();
 
             NamedTaskset {
                 name: format!("taskset_U{:.1}_N{:02}_{:03}",
@@ -130,16 +134,16 @@ struct AnalysisMaxBw {
     pub max_per_core_bw: f64,
 }
 
-impl SchedAnalysis<(), &[RTTask]> for AnalysisMaxBw {
+impl SchedAnalysis<(), PriorityTask<LLTask>> for AnalysisMaxBw {
     fn analyzer_name(&self) -> &str {
         self.base_analysis.analyzer_name()
     }
 
-    fn check_preconditions(&self, taskset: &&[RTTask]) -> Result<(), SchedError> {
+    fn check_preconditions(&self, taskset: &[PriorityTask<LLTask>]) -> Result<(), SchedError> {
         self.base_analysis.check_preconditions(taskset)
     }
 
-    fn run_test(&self, taskset: &[RTTask]) -> Result<(), SchedError> {
+    fn run_test(&self, taskset: &[PriorityTask<LLTask>]) -> Result<(), SchedError> {
         let model = &self.base_analysis.model;
         let per_core_util =
             model.resource / (model.concurrency as f64 * model.period);
@@ -153,20 +157,20 @@ impl SchedAnalysis<(), &[RTTask]> for AnalysisMaxBw {
 }
 
 fn generate_interface_with_max_bw(
-    taskset: &[RTTask],
+    taskset: &[PriorityTask<LLTask>],
     period: Time,
     step_size: Time,
     max_cores: u64,
     max_per_core_bandwidth: f64,
 ) -> anyhow::Result<MPRModel> {
-    if !RTUtils::constrained_deadlines(taskset) {
+    if !Taskset::<LLTask>::constrained_deadlines(taskset) {
         return Err(SchedError::constrained_deadlines().into());
     }
 
     (extra::DesignerPeriodNaive {
         period,
         concurrency_iter_fn: |_| {
-            let lb = f64::ceil(RTUtils::total_utilization(taskset)) as u64;
+            let lb = f64::ceil(Taskset::<LLTask>::total_utilization(taskset)) as u64;
             let ub = u64::min(taskset.len() as u64, max_cores);
 
             Ok(Box::new(lb ..= ub))
@@ -174,7 +178,7 @@ fn generate_interface_with_max_bw(
         resource_iter_fn:
             |period, concurrency| {
                 let min_resource =
-                    RTUtils::total_utilization(taskset) * period;
+                    Taskset::<LLTask>::total_utilization(taskset) * period;
                 let max_resource = {
                     let designer = fixed_priority::bcl09::DesignerLinear { period, concurrency };
 
@@ -182,7 +186,7 @@ fn generate_interface_with_max_bw(
                     designer.run_designer(taskset)?.resource
                 };
 
-                Ok(Box::new(time_range_iterator_w_step(min_resource, max_resource, step_size)))
+                Ok(Box::new(TimeIterators::range_w_step(min_resource, max_resource, step_size)))
             },
         analysis_gen_fn: |resource, period, concurrency| {
             AnalysisMaxBw {

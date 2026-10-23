@@ -56,7 +56,7 @@ pub struct TasksetRunResultInsights {
 /* -------------------------------------------------------------------------- */
 
 impl TasksetRunResultInstance {
-    pub fn slack_time(&self, task: &RTTask) -> Time {
+    pub fn slack_time(&self, task: &LLTask) -> Time {
         task.deadline - self.rel_finishing_time
     }
 }
@@ -115,10 +115,10 @@ pub fn can_run_taskset(run: &TasksetRun, args: &RunnerArgsBase) -> bool {
 
 pub fn check_root_cgroup(args: &RunnerArgsBase) -> anyhow::Result<()> {
     mount_cgroup_cpu()?;
-    let (Either::Left(cgroup_runtime), cgroup_period) = get_cgroup_us(".")?
+    let (HCBSTime::Time(cgroup_runtime), HCBSTime::Time(cgroup_period)) = get_cgroup_us(".")?
         else { anyhow::bail!("Root cgroup cannot return 'max' as runtime") };
 
-    let cgroup_bw = cgroup_runtime as f64 / cgroup_period as f64;
+    let cgroup_bw = cgroup_runtime / cgroup_period;
     if cgroup_bw < args.max_allocable_bw {
         anyhow::bail!("Cannot run tasksets as the maximum allocable bandwidth is {cgroup_bw}, \
                             while you are requesting {} max bw", args.max_allocable_bw);

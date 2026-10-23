@@ -57,18 +57,17 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>, mult
             .map_err(|err| anyhow::format_err!("Error in removing {tmp_output_file}: {err}"))?
     }
 
-    let cpu_set = CpuSet::any_subset(run.config.cpus)?;
+    let cpu_set = pid::CpuSet::online()?.any_subset(run.config.cpus)?;
     let mut cgroup = HCBSCgroup::new(&args.cgroup)?
         .with_force_kill(true);
     if !multi_runtime  {
-        cgroup.set_cpu_bw_us(run.config.runtime.as_micros() as u64,
-                             run.config.period.as_micros() as u64)?;
+        cgroup.set_cgroup_us(run.config.runtime, run.config.period)?;
     } else {
         unimplemented!("Cannot set multiCPU bandwidth");
     }
 
     let self_proc = cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?;
-    self_proc.set_sched_policy(SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
+    self_proc.set_sched_policy(pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
     if !multi_runtime  {
         self_proc.set_affinity(cpu_set)?;
     }
@@ -100,18 +99,23 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>, mult
 fn compute_cpu_speed() -> anyhow::Result<u64> {
     let out_file = format!("/tmp/calibration_data.txt");
 
+    let self_pid = Pid(std::process::id());
+
     // run periodic thread to calibrate
-    assign_pid_to_cgroup(".", std::process::id())?;
-    set_sched_policy(std::process::id(), SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
-    set_cpuset_to_pid(std::process::id(), &CpuSet::any_subset(1)?)?;
+    assign_pid_to_cgroup(".", self_pid)?;
+    pid::set_sched_policy(self_pid, pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
+    pid::set_cpuset_to_pid(self_pid, &pid::CpuSet::online()?.any_subset(1)?)?;
 
     let mut proc = run_periodic_thread(PeriodicThreadData {
         start_priority: 99,
         cpu_speed: None,
-        tasks: vec![ RTTask {
-            wcet: Time::millis(10.0),
-            deadline: Time::millis(100.0),
-             period: Time::millis(100.0),
+        tasks: vec![ PriorityTask {
+            task: LLTask {
+                wcet: Time::millis(10.0),
+                deadline: Time::millis(100.0),
+                period: Time::millis(100.0),
+            },
+            priority: 0,
         } ],
         num_instances_per_job: 1,
         extra_args: String::with_capacity(0),
@@ -120,8 +124,8 @@ fn compute_cpu_speed() -> anyhow::Result<u64> {
     proc.wait()
         .map_err(|err| anyhow::format_err!("Error in waiting for periodic_thread: {err}"))?;
 
-    set_cpuset_to_pid(std::process::id(), &CpuSet::all()?)?;
-    set_sched_policy(std::process::id(), SchedPolicy::other(), SchedFlags::RESET_ON_FORK)?;
+    pid::set_cpuset_to_pid(self_pid, &pid::CpuSet::online()?)?;
+    pid::set_sched_policy(self_pid, pid::SchedPolicy::other(), pid::SchedFlags::RESET_ON_FORK)?;
 
     // read calibration results
     let out_data = std::fs::read_to_string(&out_file)
@@ -195,7 +199,7 @@ fn parse_taskset_results(out_file: &str) -> anyhow::Result<Vec<TasksetRunResultI
 pub struct PeriodicThreadData {
     pub start_priority: u64,
     pub cpu_speed: Option<u64>,
-    pub tasks: Vec<RTTask>,
+    pub tasks: Vec<PriorityTask<LLTask>>,
     pub num_instances_per_job: u64,
     pub extra_args: String,
     pub out_file: String,
@@ -211,7 +215,7 @@ pub fn run_periodic_thread(args: PeriodicThreadData) -> anyhow::Result<HCBSProce
     }
 
     // assert tasks are ordered by period (ascending)
-    if !eva_rt_common::utils::RTUtils::is_taskset_sorted_by_period(&args.tasks) {
+    if !Taskset::<PriorityTask<LLTask>>::rate_monotonic_priority_assignment(&args.tasks) {
         anyhow::bail!("Taskset for periodic_thread must be sorted by period.");
     }
 

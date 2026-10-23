@@ -63,9 +63,9 @@ fn main() -> anyhow::Result<()> {
                 core::ptr::write_volatile(&mut i, i_val + 1);
             } }
         }
-        MountCgroupFS => hcbs_utils::cgroup::mount_cgroup_fs()?,
-        MountCgroupCPU => hcbs_utils::cgroup::mount_cgroup_cpu()?,
-        MountDebugFS => hcbs_utils::debugfs::mount_debug_fs()?,
+        MountCgroupFS => hcbs_test_suite::cgroup::mount_cgroup_fs()?,
+        MountCgroupCPU => hcbs_test_suite::cgroup::mount_cgroup_cpu()?,
+        MountDebugFS => hcbs_test_suite::utils::mount_debug_fs()?,
         SetupFairServers(args) => setup_fair_servers::main(args)?,
         MoveRtTasksToRootCgroup => move_rt_to_root_cgroup::main()?,
         CgroupBwChange(args) => cgroup_setup::main(args)?,

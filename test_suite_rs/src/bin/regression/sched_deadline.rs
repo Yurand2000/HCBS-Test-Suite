@@ -24,7 +24,7 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
         anyhow::bail!("Batch testing requires a maximum running time");
     }
 
-    let cpus = CpuSet::all()?.num_cpus();
+    let cpus = pid::CpuSet::online_cpus();
     let cgroup_expected_bw = cpus as f64 * args.runtime_ms as f64 / args.period_ms as f64;
     let deadline_expected_bw = cpus as f64 * 4.0 / 10.0;
     let cgroup_error = cgroup_expected_bw * 0.025; // 2.5% error
@@ -61,10 +61,13 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, f64)> {
     let main_fn = || {
-        let cpus = CpuSet::all()?.num_cpus();
+        let cpus = pid::CpuSet::online_cpus();
         let mut cgroup = HCBSCgroup::new(&args.cgroup)?
             .with_force_kill(false);
-        cgroup.set_cpu_bw_us(args.runtime_ms * 1000, args.period_ms * 1000)?;
+        cgroup.set_cgroup_us(
+            Time::millis(args.runtime_ms as f64),
+            Time::millis(args.period_ms as f64)
+        )?;
 
         let dl_runtime_ms = args.period_ms * 4 / 10;
 
@@ -77,8 +80,8 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
                     let id = proc.id();
 
                     let proc = cgroup.assign_process(proc).map_err(|(_, err)| err)?;
-                    proc.set_affinity(CpuSet::single(cpu as u32)?)?;
-                    proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())?;
+                    proc.set_affinity(pid::CpuSet::single(CpuID(cpu as u32)))?;
+                    proc.set_sched_policy(pid::SchedPolicy::RR(50), pid::SchedFlags::empty())?;
 
                     Ok(id)
                 })
@@ -86,11 +89,11 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
 
         dl_processes.iter_mut()
             .try_for_each(|proc| -> anyhow::Result<()> {
-                proc.set_sched_policy(SchedPolicy::DEADLINE {
+                proc.set_sched_policy(pid::SchedPolicy::DEADLINE {
                     runtime_ms: dl_runtime_ms,
                     deadline_ms: args.period_ms,
                     period_ms: args.period_ms,
-                }, SchedFlags::RESET_ON_FORK)?;
+                }, pid::SchedFlags::RESET_ON_FORK)?;
 
                 Ok(())
             })?;
@@ -112,8 +115,8 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
         Ok((deadline_total_usage, cgroup_total_usage))
     };
 
-    assign_pid_to_cgroup(".", std::process::id())?;
-    set_sched_policy(std::process::id(), SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
+    assign_pid_to_cgroup(".", Pid(std::process::id()))?;
+    pid::set_sched_policy(Pid(std::process::id()), pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
 
     let rt_cgroup_runtime_orig = reduce_cgroups_runtime()?;
     let res = main_fn();
@@ -122,20 +125,20 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
     res
 }
 
-fn reduce_cgroups_runtime() -> anyhow::Result<u64> {
-    let (Either::Left(rt_runtime), rt_period) = get_cgroup_us(".")?
+fn reduce_cgroups_runtime() -> anyhow::Result<Time> {
+    let (HCBSTime::Time(rt_runtime), HCBSTime::Time(rt_period)) = get_cgroup_us(".")?
         else { unreachable!() };
 
-    set_cgroup_us(".", Either::Left(rt_period * 5 / 10), rt_period)?;
+    set_cgroup_us(".", rt_period / 2.0, rt_period)?;
     Ok(rt_runtime)
 }
 
-fn restore_cgroups_runtime(rt_runtime_us: u64) -> anyhow::Result<()> {
+fn restore_cgroups_runtime(rt_runtime_us: Time) -> anyhow::Result<()> {
     std::thread::sleep(std::time::Duration::from_millis(100));
 
-    let (Either::Left(_), rt_period) = get_cgroup_us(".")?
+    let (HCBSTime::Time(_), HCBSTime::Time(rt_period)) = get_cgroup_us(".")?
         else { unreachable!() };
 
-    set_cgroup_us(".", Either::Left(rt_runtime_us), rt_period)?;
+    set_cgroup_us(".", rt_runtime_us, rt_period)?;
     Ok(())
 }

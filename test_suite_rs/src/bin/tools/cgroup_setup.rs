@@ -21,24 +21,24 @@ pub struct Bandwidth {
 }
 
 pub fn main(args: MyArgs) -> anyhow::Result<()> {
-    use hcbs_utils::prelude::*;
+    use hcbs_test_suite::prelude::*;
 
     mount_cgroup_cpu()?;
 
     let (old_runtime_us, old_period_us) = get_cgroup_us(&args.cgroup)?;
 
     let runtime_us = match args.bw.runtime_ms {
-        Some(ms) => Either::Left(ms * 1000),
+        Some(ms) => HCBSTime::Time(Time::millis(ms as f64)),
         None => old_runtime_us,
     };
 
     let period_us = match args.bw.period_ms {
-        Some(ms) => ms * 1000,
+        Some(ms) => HCBSTime::Time(Time::millis(ms as f64)),
         None => old_period_us,
     };
 
     create_cgroup(&args.cgroup)?;
-    set_cgroup_us(&args.cgroup, runtime_us, period_us)?;
+    set_cgroup(&args.cgroup, runtime_us, period_us)?;
 
     Ok(())
 }

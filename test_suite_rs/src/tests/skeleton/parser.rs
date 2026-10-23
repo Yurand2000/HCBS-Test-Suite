@@ -29,7 +29,7 @@ pub fn parse_taskset(data: &str) -> anyhow::Result<NamedTaskset> {
     let line_parser = map(
         (space0, u64_parser(), space1, u64_parser(), space1, u64_parser(), space0),
         |(_, runtime_ms, _, deadline_ms, _, period_ms, _)|
-            RTTask {
+            LLTask {
                 wcet: Time::millis(runtime_ms as f64),
                 deadline: Time::millis(deadline_ms as f64),
                 period: Time::millis(period_ms as f64),
@@ -38,7 +38,14 @@ pub fn parse_taskset(data: &str) -> anyhow::Result<NamedTaskset> {
 
     let mut parser = map(
         (tag("Taskset"), space1, name_parser(), multispace1, separated_list1(newline, line_parser)),
-        |(_, _, name, _, tasks)| NamedTaskset { name, tasks }
+        |(_, _, name, _, tasks)| {
+            let max_prio = tasks.len();
+            let tasks = tasks.into_iter().enumerate()
+                .map(|(prio, task)| PriorityTask { task, priority: max_prio - prio })
+                .collect();
+
+            NamedTaskset { name, tasks }
+        }
     );
 
     parser.parse(&data)

@@ -24,7 +24,7 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
         anyhow::bail!("Batch testing requires a maximum running time");
     }
 
-    let cpus = CpuSet::all()?.num_cpus();
+    let cpus = pid::CpuSet::online_cpus();
     let cgroup_expected_bw = cpus as f64 * args.runtime_ms as f64 / args.period_ms as f64;
     let fifo_expected_bw = cpus as f64 - cgroup_expected_bw;
     let cgroup_error = cgroup_expected_bw * 0.025; // 2.5% error
@@ -60,13 +60,16 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 }
 
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, f64)> {
-    assign_pid_to_cgroup(".", std::process::id())?;
-    set_sched_policy(std::process::id(), SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
+    assign_pid_to_cgroup(".", Pid(std::process::id()))?;
+    pid::set_sched_policy(Pid(std::process::id()), pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
 
-    let cpus = CpuSet::all()?.num_cpus();
+    let cpus = pid::CpuSet::online_cpus();
     let mut cgroup = HCBSCgroup::new(&args.cgroup)?
         .with_force_kill(false);
-    cgroup.set_cpu_bw_us(args.runtime_ms * 1000, args.period_ms * 1000)?;
+    cgroup.set_cgroup_us(
+        Time::millis(args.runtime_ms as f64),
+        Time::millis(args.period_ms as f64)
+    )?;
 
     let mut fifo_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
     let cgroup_processes = (0..cpus).map(|_| run_yes()).collect::<Result<Vec<_>, _>>()?;
@@ -77,8 +80,8 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
                 let id = proc.id();
 
                 let proc = cgroup.assign_process(proc).map_err(|(_, err)| err)?;
-                proc.set_affinity(CpuSet::single(cpu as u32)?)?;
-                proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())?;
+                proc.set_affinity(pid::CpuSet::single(CpuID(cpu as u32)))?;
+                proc.set_sched_policy(pid::SchedPolicy::RR(50), pid::SchedFlags::empty())?;
 
                 Ok(id)
             })
@@ -86,8 +89,8 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
 
     fifo_processes.iter_mut().enumerate()
         .try_for_each(|(cpu, proc)| -> anyhow::Result<()> {
-            proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())?;
-            proc.set_affinity(CpuSet::single(cpu as u32)?)?;
+            proc.set_sched_policy(pid::SchedPolicy::RR(50), pid::SchedFlags::empty())?;
+            proc.set_affinity(pid::CpuSet::single(CpuID(cpu as u32)))?;
 
             Ok(())
         })?;

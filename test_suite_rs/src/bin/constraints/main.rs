@@ -17,8 +17,8 @@ fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     let args = <Command as clap::Parser>::parse();
+    hcbs_test_suite::cgroup::mount_cgroup_cpu()?;
 
-    hcbs_utils::prelude::mount_cgroup_cpu()?;
     match args {
         CgroupSetup(_) => cgroup_setup::main()?,
         CgroupHierarchy(args) => cgroup_hierarchy::main(args)?,

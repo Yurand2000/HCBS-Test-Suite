@@ -9,15 +9,22 @@ clap = { version = "4.6.0", features = ["derive"] }
 ctrlc = "3.5.2"
 nom = "8.0.0"
 rand = "0.10.0"
-sysinfo = "0.38.4"
-sysconf = "0.3.4"
 crossbeam = "0.8.4"
-eva-rt-common = "0.1.1"
 eva-rt-engine = { git = "https://github.com/Yurand2000/EVA-rt-Engine" }
-hcbs-utils = { git = "https://github.com/Yurand2000/hcbs-utils.git", branch = "cpu-rt-max" }
+libtux = { git = "https://github.com/Yurand2000/libtux", tag = "version-0.1.1", default-features = false, features = [
+    "cpuset",
+    "time",
+    "time_extra",
+    "time_iterators",
+    "sched",
+    "signal",
+    "serde",
+    "parser",
+] }
 env_logger = "0.11.10"
-log = "0.4.29"
 graphviz-rust = "0.9.8"
+log = "0.4.34"
+libc = "0.2.190"
 
 [[bin]]
 name = "regression"

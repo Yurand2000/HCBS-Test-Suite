@@ -46,13 +46,16 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<()> {
     let mut cgroup = HCBSCgroup::new(&args.cgroup)?
         .with_force_kill(true);
-    cgroup.set_cpu_bw_us(args.runtime_ms * 1000, args.period_ms * 1000)?;
+    cgroup.set_cgroup_us(
+        Time::millis(args.runtime_ms as f64),
+        Time::millis(args.period_ms as f64)
+    )?;
 
     cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?
-        .set_sched_policy(SchedPolicy::RR(99), SchedFlags::RESET_ON_FORK)?;
+        .set_sched_policy(pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
 
     let mut proc = run_yes()?;
-    proc.set_sched_policy(SchedPolicy::RR(50), SchedFlags::empty())?;
+    proc.set_sched_policy(pid::SchedPolicy::RR(50), pid::SchedFlags::empty())?;
     let pid = proc.id();
 
     let mut proc = Some(proc);

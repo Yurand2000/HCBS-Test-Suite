@@ -1,53 +1,23 @@
 use std::{io::Write, time::Duration};
 
+pub mod batch_test;
+
 pub mod prelude {
+    pub use super::batch_test::*;
+
     pub use super::{
-        __shell,
-        __println_debug,
-        set_batch_test,
-        is_batch_test,
+        ExitFlag,
+        create_ctrlc_handler,
         wait_loop,
         wait_loop_periodic_fn,
-        create_ctrlc_handler,
-        ExitFlag,
-        batch_test_header,
-        batch_test_result,
-        batch_test_result_details,
-        batch_test_result_skippable,
-        batch_test_result_skippable_details,
-        batch_test_success,
-        batch_test_success_details,
-        batch_test_skipped,
-        batch_test_failure,
-        get_fair_server_avg_bw,
+        __shell,
+        __println_debug,
+        __read_file,
+        __read_file_parse,
+        __write_file,
         Skippable,
+        mount_debug_fs,
     };
-}
-
-pub fn __println_debug<'a, F: FnOnce() -> String>(fun: F) {
-    match std::env::var("DEBUG") {
-        Ok(v) if v != "" => {
-            let str = fun();
-            println!("{str}");
-            std::io::stdout().flush().unwrap();
-        },
-        _ => (),
-    };
-}
-
-pub unsafe fn set_batch_test() {
-    unsafe { std::env::set_var("BATCH_TEST", "1") };
-}
-
-pub fn is_env_var_set(var: &str) -> bool {
-    match std::env::var(var) {
-        Ok(v) if v != "" => true,
-        _ => false,
-    }
-}
-
-pub fn is_batch_test() -> bool {
-    is_env_var_set("BATCH_TEST")
 }
 
 #[derive(Clone)]
@@ -121,6 +91,17 @@ pub fn wait_loop_periodic_fn<F>(period_secs: f32, max_time: Option<u64>, ctrlc_f
     Ok(())
 }
 
+pub fn __println_debug<'a, F: FnOnce() -> String>(fun: F) {
+    match std::env::var("DEBUG") {
+        Ok(v) if v != "" => {
+            let str = fun();
+            println!("{str}");
+            std::io::stdout().flush().unwrap();
+        },
+        _ => (),
+    };
+}
+
 pub fn __shell(cmd: &str) -> anyhow::Result<std::process::Output> {
     use std::process::Command;
 
@@ -131,136 +112,49 @@ pub fn __shell(cmd: &str) -> anyhow::Result<std::process::Output> {
         .map_err(|err| anyhow::format_err!("Error in executing \"sh -c {cmd}\": {err}"))
 }
 
-pub fn batch_test_success() {
-    if is_env_var_set("TERM_COLORS") {
-        println!("\x1b[32mSuccess ✔\x1b[0m");
-    } else {
-        println!("Success ✔");
-    }
+pub fn __read_file<P>(file: P) -> anyhow::Result<String>
+    where P: AsRef<std::path::Path> + std::fmt::Display
+{
+    std::fs::read_to_string(file.as_ref())
+        .map_err(|err| anyhow::format_err!("Error in reading file {file}: {err}"))
 }
 
-pub fn batch_test_success_details<T: std::fmt::Display>(msg: T) {
-    batch_test_success();
-
-    if is_env_var_set("TERM_COLORS") {
-        println!("\x1b[32m    Details: \x1b[0m{msg}");
-    } else {
-        println!("    Details: {msg}");
-    }
+pub fn __read_file_parse<P, F, U, E>(file: P, mut parse: F) -> anyhow::Result<U>
+    where
+        P: AsRef<std::path::Path> + std::fmt::Display,
+        F: FnMut(String) -> Result<U, E>,
+        E: std::fmt::Display
+{
+    std::fs::read_to_string(file.as_ref())
+        .map_err(|err| anyhow::format_err!("Error in reading file {file}: {err}"))
+        .and_then(|data| parse(data).map_err(|err| anyhow::format_err!("Error in parsing file {file}: {err}")))
 }
 
-pub fn batch_test_failure<E: std::fmt::Display>(err: E) {
-    if is_env_var_set("TERM_COLORS") {
-        println!("\x1b[31mFailure ✖\n    Reason: \x1b[0m{err}")
-    } else {
-        println!("Failure ✖\n    Reason: {err}")
-    }
+pub fn __write_file<P, C>(file: P, data: C) -> anyhow::Result<()>
+    where P: AsRef<std::path::Path> + std::fmt::Display, C: AsRef<[u8]>
+{
+    std::fs::write(file.as_ref(), data)
+        .map_err(|err| anyhow::format_err!("Error in writing file {file}: {err}"))
 }
 
-pub fn batch_test_skipped<T: std::fmt::Display>(msg: T) {
-    if is_env_var_set("TERM_COLORS") {
-        println!("\x1b[33mSkipped ⛒\n    Reason: \x1b[0m{msg}");
-    } else {
-        println!("Skipped ⛒\n    Reason: {msg}");
-    }
-}
+pub fn try_op_timeout<F, T, E>(mut fun: F, timeout: std::time::Duration) -> Result<T, E>
+    where F: FnMut() -> Result<T, E>
+{
+    let start = std::time::Instant::now();
 
-pub fn batch_test_header(test_name: &str, test_category: &str) {
-    match std::env::var("BATCH_TEST_CUSTOM_NAME") {
-        Ok(custom) if custom != "" => print!("[{}] {}: ", test_category, custom),
-        _ => print!("[{}] {}: ", test_category, test_name),
-    };
-
-    std::io::stdout().flush().unwrap();
-}
-
-pub fn batch_test_result<T>(result: anyhow::Result<T>) -> anyhow::Result<()> {
-    match &result {
-        Ok(_) => batch_test_success(),
-        Err(err) => batch_test_failure(err),
-    };
-
-    if is_batch_test() {
-        Ok(())
-    } else {
-        result.map(|_| ())
-    }
-}
-
-pub fn batch_test_result_skippable<T>(result: anyhow::Result<Skippable<T>>) -> anyhow::Result<()> {
-    match &result {
-        Ok(Skippable::Result(_)) => batch_test_success(),
-        Ok(Skippable::Skipped(err)) => batch_test_skipped(err),
-        Err(err) => batch_test_failure(err),
-    };
-
-    if is_batch_test() {
-        Ok(())
-    } else {
-        result.map(|_| ())
-    }
-}
-
-pub fn batch_test_result_details<T: std::fmt::Display>(result: anyhow::Result<T>) -> anyhow::Result<()> {
-    match &result {
-        Ok(msg) => batch_test_success_details(msg),
-        Err(err) => batch_test_failure(err),
-    };
-
-    if is_batch_test() {
-        Ok(())
-    } else {
-        result.map(|_| ())
-    }
-}
-
-pub fn batch_test_result_skippable_details<T: std::fmt::Display>(result: anyhow::Result<Skippable<T>>) -> anyhow::Result<()> {
-    match &result {
-        Ok(Skippable::Result(msg)) => batch_test_success_details(msg),
-        Ok(Skippable::Skipped(err)) => batch_test_skipped(err),
-        Err(err) => batch_test_failure(err),
-    };
-
-    if is_batch_test() {
-        Ok(())
-    } else {
-        result.map(|_| ())
-    }
-}
-
-pub fn get_fair_server_avg_bw() -> anyhow::Result<f64> {
-    let mut avg_bw = 0f64;
-    let mut num_cpus = 0f64;
-
-    for entry in std::fs::read_dir("/sys/kernel/debug/sched/fair_server")? {
-        let entry = entry?.path();
-        if entry.is_dir() {
-            let entry = entry.into_os_string().into_string().unwrap();
-
-            let runtime: u64 =
-                std::fs::read_to_string(format!("{entry}/runtime"))
-                    .map_err(|err| anyhow::format_err!("Error in reading {entry}/runtime: {err}"))
-                    .and_then(|value| value.trim().parse::<u64>()
-                        .map_err(|err| anyhow::format_err!("Error in parsing {entry}/runtime: {err}"))
-                    )?;
-            let period: u64 =
-                std::fs::read_to_string(format!("{entry}/period"))
-                    .map_err(|err| anyhow::format_err!("Error in reading {entry}/period: {err}"))
-                    .and_then(|value| value.trim().parse::<u64>()
-                        .map_err(|err| anyhow::format_err!("Error in parsing {entry}/period: {err}"))
-                    )?;
-
-            avg_bw += runtime as f64 / period as f64;
-            num_cpus += 1f64;
+    while (std::time::Instant::now() - start) < timeout {
+        match fun() {
+            res @ Ok(_) => { return res; },
+            Err(_) => (),
         }
     }
 
-    Ok(avg_bw / num_cpus)
+    fun()
 }
 
 pub enum Skippable<T, E = anyhow::Error> {
     Result(T),
-    Skipped(E)
+    Skipped(E),
 }
 
 impl<T, E> Into<Result<T, E>> for Skippable<T, E> {
@@ -270,4 +164,25 @@ impl<T, E> Into<Result<T, E>> for Skippable<T, E> {
             Skippable::Skipped(err) => Err(err),
         }
     }
+}
+
+/// Try mounting the debug filesystem
+pub fn mount_debug_fs() -> anyhow::Result<()> {
+    use log::*;
+    use crate::utils::__shell;
+
+    // Runs: mount -t debugfs none /sys/kernel/debug
+    if __shell(&format!("mount | grep debugfs"))?.stdout.len() > 0 {
+        info!("DebugFS already mounted");
+        return Ok(());
+    }
+
+    if !__shell(&format!("mount -t debugfs none /sys/kernel/debug"))?.status.success() {
+        error!("Error in mounting DebugFS");
+        anyhow::bail!("Error in mounting DebugFS");
+    }
+
+    info!("Mounted DebugFS");
+
+    Ok(())
 }

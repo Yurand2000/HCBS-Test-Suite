@@ -1,12 +1,21 @@
 use crate::prelude::*;
 
+pub mod cgroup;
+
 pub mod process;
 pub mod utils;
 pub mod tests;
 
 pub mod prelude {
-    pub use hcbs_utils::prelude::*;
-    pub use eva_rt_common::prelude::RTTask;
+    pub use log::*;
+    pub use libtux::prelude::*;
+    pub use eva_rt_engine::task::{
+        LLTask,
+        PriorityTask,
+        Taskset,
+    };
+
+    pub use super::cgroup::prelude::*;
 
     pub use super::process::prelude::*;
     pub use super::utils::prelude::*;
@@ -25,7 +34,7 @@ pub mod prelude {
 #[derive(Debug, Clone)]
 pub struct NamedTaskset {
     pub name: String,
-    pub tasks: Vec<RTTask>,
+    pub tasks: Vec<PriorityTask<LLTask>>,
 }
 
 #[derive(Debug, Clone)]

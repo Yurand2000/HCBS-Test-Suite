@@ -19,8 +19,8 @@ pub struct MyArgs {
     pub num_tasks: u64,
 
     /// task's allowed cpus
-    #[arg(long = "cpu-set", value_parser = <CpuSetUnchecked as std::str::FromStr>::from_str)]
-    pub cpu_set: Option<CpuSetUnchecked>,
+    #[arg(long = "cpu-set", value_parser = <pid::CpuSet as std::str::FromStr>::from_str)]
+    pub cpu_set: Option<pid::CpuSet>,
 
     /// max running time
     #[arg(short = 't', long = "max-time", value_name = "sec: u64")]
@@ -34,7 +34,7 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 
     let single_bw = args.runtime_ms as f64 / args.period_ms as f64;
     let num_cpus = args.cpu_set.as_ref()
-        .map_or(CpuSet::all()?.num_cpus(), |cpu_set| cpu_set.num_cpus());
+        .map_or(pid::CpuSet::online_cpus(), |cpu_set| cpu_set.num_cpus());
 
     let total_cgroup_bw = single_bw * num_cpus as f64;
     let max_expected_bw = f64::min(total_cgroup_bw, args.num_tasks as f64);
@@ -73,38 +73,37 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippable<f64>> {
     // check if the cpu_set is valid
-    let cpu_set = args.cpu_set
-        .map(|cpu_set| cpu_set.try_into())
-        .transpose();
+    let online_cpus = pid::CpuSet::online()?;
 
-    let cpu_set: Option<CpuSet> =
-        match cpu_set {
-            Err(err @ CpuSetBuildError::UnavailableCPU(_)) =>
-                { return Ok(Skippable::Skipped(err.into())); },
-            Ok(cpu_set) => cpu_set,
-            Err(err) =>
-                { return Err(err.into()); },
-        };
+    let cpu_set = match args.cpu_set {
+        Some(cpu_set) =>
+            if cpu_set.is_subset(&online_cpus) { Some(cpu_set) }
+            else { return Ok(Skippable::Skipped(anyhow::format_err!("Not enough CPUs"))); },
+        None => None,
+    };
 
     // run the tasks
     let mut cgroup = HCBSCgroup::new(&args.cgroup)?
         .with_force_kill(true);
-    cgroup.set_cpu_bw_us(args.runtime_ms * 1000, args.period_ms * 1000)?;
+    cgroup.set_cgroup_us(
+        Time::millis(args.runtime_ms as f64),
+        Time::millis(args.period_ms as f64)
+    )?;
 
     cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?
-        .set_sched_policy(SchedPolicy::RR(99), SchedFlags::empty())?;
+        .set_sched_policy(pid::SchedPolicy::RR(99), pid::SchedFlags::empty())?;
 
     let procs =
         (0..args.num_tasks)
         .map(|_| -> anyhow::Result<Pid> {
             let cpu_set = cpu_set.clone();
             let proc = run_yes_pre_exec(move || {
-                set_sched_policy(0, SchedPolicy::RR(50), SchedFlags::empty())
+                pid::set_sched_policy(Pid(0), pid::SchedPolicy::RR(50), pid::SchedFlags::empty())
                     .map_err(|_| std::io::Error::last_os_error())?;
 
                 let Some(cpu_set) = cpu_set.clone() else { return Ok(()); };
 
-                set_cpuset_to_pid(0, &cpu_set)
+                pid::set_cpuset_to_pid(Pid(0), &cpu_set)
                     .map_err(|_| std::io::Error::last_os_error())
             })?;
             let proc = cgroup.assign_process(proc).map_err(|(_, err)| err)?;
