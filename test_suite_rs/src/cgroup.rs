@@ -73,6 +73,7 @@ pub fn mount_cgroup_fs() -> anyhow::Result<()> {
 pub fn mount_cgroup_cpu() -> anyhow::Result<()> {
     mount_cgroup_fs()?;
     cgroup_v2::__mount_cpu_fs()?;
+    cgroup_v2::__mount_cpuset_fs()?;
 
     Ok(())
 }
@@ -129,6 +130,15 @@ pub fn create_cgroup(name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Create new cgroup (multiruntime)
+///
+/// Notes:: creates all the cgroup hierarchy recursively if necessary
+pub fn create_cgroup_cpuset(name: &str) -> anyhow::Result<()> {
+    cgroup_v2::create_cgroup_cpuset(name)?;
+
+    Ok(())
+}
+
 /// Delete cgroup
 ///
 /// Tries to delete the given cgroup. A cgroup can be deleted only if
@@ -146,11 +156,6 @@ pub fn delete_cgroup(name: &str) -> anyhow::Result<()> {
         let procs = cgroup_pids(name)?;
         error!("Cgroup {name} has active processes: {procs:?}");
         anyhow::bail!("Cgroup {name} has active processes");
-    }
-
-    // Release the cgroup resources before removing it for faster cleanups
-    if let (HCBSTime::Max, _) = get_cgroup_us(name)? {
-        set_cgroup_us(name, Time::zero(), Time::zero())?;
     }
 
     let path = cgroup_abs_path(name);

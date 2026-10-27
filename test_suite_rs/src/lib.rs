@@ -101,5 +101,20 @@ pub fn local_executable_cmd(def_dir: &str, name: &str) -> anyhow::Result<String>
 }
 
 pub fn is_multicpu_enabled() -> anyhow::Result<bool> {
-    Ok(false)
+    mount_cgroup_cpu()?;
+
+    let name = "multicpu_test_cgroup";
+    if cgroup_exists(name) {
+        return Ok(false);
+    }
+
+    let mut cgroup = HCBSCgroup::new_w_cpuset(name)?
+        .with_force_kill(false);
+
+    cgroup.set_cgroup_us(Time::zero(), Time::zero())?;
+    Ok(cgroup.set_cgroup_override(
+        &"0".parse()?,
+        Time::micros(100_000f64),
+        Time::micros(1_000_000f64)
+    ).is_ok())
 }

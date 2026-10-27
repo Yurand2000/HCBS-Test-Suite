@@ -1,12 +1,15 @@
 use std::collections::HashMap;
 
+use crate::cgroup::cgroup_v2::create_cgroup_cpuset;
 use crate::prelude::*;
 use crate::utils::try_op_timeout;
 
 mod uni;
+mod multi;
 
 pub mod prelude {
     pub use super::uni::prelude::*;
+    pub use super::multi::prelude::*;
     pub use super::{
         HCBSCgroup,
         HCBSProcess,
@@ -26,6 +29,20 @@ impl HCBSCgroup {
         }
 
         create_cgroup(name)?;
+
+        Ok(Self {
+            name: name.to_owned(),
+            force_kill: false,
+            processes: HashMap::new(),
+        })
+    }
+
+    pub fn new_w_cpuset(name: &str) -> anyhow::Result<Self> {
+        if name == "." {
+            anyhow::bail!("Cannot handle root cgroup");
+        }
+
+        create_cgroup_cpuset(name)?;
 
         Ok(Self {
             name: name.to_owned(),
@@ -74,6 +91,10 @@ impl HCBSCgroup {
             .map(|_| self.processes.remove(&pid).unwrap())
     }
 
+    pub fn get_cgroup(&mut self) -> anyhow::Result<multi::CgroupConfig> {
+        multi::get_cgroup(&self.name)
+    }
+
     pub fn set_cgroup_us(&mut self, runtime_us: Time, period_us: Time) -> anyhow::Result<()> {
         try_op_timeout(
             || set_cgroup_us(&self.name, runtime_us, period_us),
@@ -84,6 +105,27 @@ impl HCBSCgroup {
     pub fn set_cpu_max(&mut self) -> anyhow::Result<()> {
         try_op_timeout(
             || set_cgroup_max(&self.name),
+            std::time::Duration::from_millis(1000)
+        )
+    }
+
+    pub fn set_cgroup_cpumask(&mut self, mask: &pid::CpuSet) -> anyhow::Result<()> {
+        try_op_timeout(
+            || multi::set_cgroup_cpumask(&self.name, mask),
+            std::time::Duration::from_millis(1000)
+        )
+    }
+
+    pub fn set_cgroup_override(&mut self, mask: &pid::CpuSet, runtime: Time, period: Time) -> anyhow::Result<()> {
+        try_op_timeout(
+            || multi::set_cgroup_override(&self.name, mask, runtime, period),
+            std::time::Duration::from_millis(1000)
+        )
+    }
+
+    pub fn reset_cgroup_override(&mut self, mask: &pid::CpuSet) -> anyhow::Result<()> {
+        try_op_timeout(
+            || multi::reset_cgroup_override(&self.name, mask),
             std::time::Duration::from_millis(1000)
         )
     }

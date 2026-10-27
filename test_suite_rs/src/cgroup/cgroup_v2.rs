@@ -8,8 +8,17 @@ pub fn cgroup_abs_path(name: &str) -> String {
 
 pub fn create_cgroup(name: &str) -> anyhow::Result<()> {
     super::__create_cgroup_common(name)?;
-    __enable_cpu_contoller_v2_recursive(name)?;
+    __enable_controller_v2_recursive(name, "cpu")?;
     info!("Created Cgroup {name}");
+
+    Ok(())
+}
+
+pub fn create_cgroup_cpuset(name: &str) -> anyhow::Result<()> {
+    super::__create_cgroup_common(name)?;
+    __enable_controller_v2_recursive(name, "cpu")?;
+    __enable_controller_v2_recursive(name, "cpuset")?;
+    info!("Created Cgroup (+ CPUSet) {name}");
 
     Ok(())
 }
@@ -42,10 +51,14 @@ pub fn __mount_cgroup_fs() -> anyhow::Result<()> {
 }
 
 pub fn __mount_cpu_fs() -> anyhow::Result<()> {
-    __enable_cpu_contoller_v2(".")
+    __enable_controller_v2(".", "cpu")
 }
 
-pub fn __is_cpu_contoller_v2_enabled(name: &str) -> anyhow::Result<bool> {
+pub fn __mount_cpuset_fs() -> anyhow::Result<()> {
+    __enable_controller_v2(".", "cpuset")
+}
+
+pub fn __is_controller_v2_enabled(name: &str, controller: &str) -> anyhow::Result<bool> {
     if !cgroup_exists(name) {
         anyhow::bail!("Cgroup {name} does not exist");
     }
@@ -59,15 +72,15 @@ pub fn __is_cpu_contoller_v2_enabled(name: &str) -> anyhow::Result<bool> {
     Ok(
         std::fs::read_to_string(controllers_path)
         .map_err(|err| anyhow::format_err!("Error in reading controllers for cgroup {name}: {err}") )?
-        .contains("cpu")
+        .contains(controller)
     )
 }
 
-pub fn __enable_cpu_contoller_v2(name: &str) -> anyhow::Result<()> {
-    if __is_cpu_contoller_v2_enabled(name)? { return Ok(()); }
+pub fn __enable_controller_v2(name: &str, controller: &str) -> anyhow::Result<()> {
+    if __is_controller_v2_enabled(name, controller)? { return Ok(()); }
 
     let controllers_path = format!("{CGROUP_ROOT}/{name}/cgroup.subtree_control");
-    std::fs::write(controllers_path, "+cpu")
+    std::fs::write(controllers_path, &format!("+{controller}"))
         .map_err(|err| anyhow::format_err!("Error in enabling CPU controller for cgroup {name}: {err}") )?;
 
     info!("Enabled CPU controller for cgroup {name}");
@@ -75,14 +88,14 @@ pub fn __enable_cpu_contoller_v2(name: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-pub fn __enable_cpu_contoller_v2_recursive(name: &str) -> anyhow::Result<()> {
+pub fn __enable_controller_v2_recursive(name: &str, controller: &str) -> anyhow::Result<()> {
     let path = std::path::Path::new(name);
     let ancestors: Vec<_> = path.ancestors()
         .filter(|ancestor| !ancestor.as_os_str().is_empty())
         .collect();
 
     ancestors.into_iter().rev()
-        .try_for_each(|ancestror| __enable_cpu_contoller_v2(ancestror.to_str().unwrap()))?;
+        .try_for_each(|ancestror| __enable_controller_v2(ancestror.to_str().unwrap(), controller))?;
 
     Ok(())
 }

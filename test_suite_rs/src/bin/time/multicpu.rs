@@ -1,4 +1,4 @@
-use std::{collections::{HashMap, HashSet}, str::FromStr};
+use std::{collections::HashMap, str::FromStr};
 
 use hcbs_test_suite::prelude::*;
 
@@ -72,44 +72,16 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 }
 
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippable<f64>> {
-    use libtux::pid::cpuset::CpuSetBuildError;
-
     assert!(args.config.len() >= 1);
 
-    let online_cpus = pid::CpuSet::online()?;
-
     // run the tasks
-    let mut cgroup_runtimes_us: HashMap<u64, HashSet<CpuID>> = HashMap::new();
-    let mut cgroup_periods_us: HashMap<u64, HashSet<CpuID>> = HashMap::new();
-
-    for CgroupConfigSet { runtime_ms, period_ms, cpu_set } in args.config.into_iter() {
-        let runtime_us = runtime_ms * 1000;
-        let period_us = period_ms * 1000;
-        let cpu_set: HashSet<_> = cpu_set.into_iter().collect();
-
-        for &cpu in cpu_set.iter() {
-            let cpuset = pid::CpuSet::single(cpu);
-            if cpuset.is_subset(&online_cpus) {
-                return Ok(Skippable::Skipped(CpuSetBuildError::UnavailableCPUs.into()));
-            }
-        }
-
-        if let Some(cpus) = cgroup_runtimes_us.get_mut(&runtime_us) {
-            *cpus = cpus.union(&cpu_set).map(|t| *t).collect();
-        } else {
-            cgroup_runtimes_us.insert(runtime_us, cpu_set.clone());
-        }
-
-        if let Some(cpus) = cgroup_periods_us.get_mut(&period_us) {
-            *cpus = cpus.union(&cpu_set).map(|t| *t).collect();
-        } else {
-            cgroup_periods_us.insert(period_us, cpu_set.clone());
-        }
-    }
-
     let mut cgroup = HCBSCgroup::new(&args.cgroup)?
         .with_force_kill(true);
-    unimplemented!("Cannot set multiCPU bandwidth");
+    cgroup.set_cgroup_us(Time::zero(), Time::zero())?;
+
+    for CgroupConfigSet { runtime_ms, period_ms, cpu_set } in args.config.into_iter() {
+        cgroup.set_cgroup_override(&cpu_set, Time::millis(runtime_ms as f64), Time::millis(period_ms as f64))?;
+    }
 
     cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?
         .set_sched_policy(pid::SchedPolicy::RR(99), pid::SchedFlags::empty())?;

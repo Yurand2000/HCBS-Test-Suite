@@ -31,7 +31,8 @@ pub fn get_cgroup_us(name: &str) -> anyhow::Result<(HCBSTime, HCBSTime)> {
     __read_file_parse(
         format!("{}/cpu.rt.max", cgroup_abs_path(name)),
         |s| {
-            let mut iter = s.trim().split_ascii_whitespace();
+            let Some(line) = s.lines().next() else { anyhow::bail!("Error reading cpu.rt.max first line.") };
+            let mut iter = line.trim().split_ascii_whitespace();
             let Some((runtime, period)) =
                 iter.next()
                     .and_then(|r| iter.next().map(|p| (r, p)))
@@ -59,7 +60,7 @@ pub fn set_cgroup_max(name: &str) -> anyhow::Result<()> {
         format!("{path}/cpu.rt.max"),
         format!("max 0")
     )
-        .map_err(|_| anyhow::format_err!("Error in writing max/0 to {path}/cpu.rt.max"))?;
+        .map_err(|_| anyhow::format_err!("Error in writing 'max 0' to {path}/cpu.rt.max"))?;
 
     info!("Set runtime/period max/0 us to {path}/cpu.rt.max");
 
@@ -78,7 +79,7 @@ pub fn set_cgroup_us(name: &str, runtime: Time, period: Time) -> anyhow::Result<
         format!("{path}/cpu.rt.max"),
         format!("{runtime_us} {period_us}")
     )
-        .map_err(|_| anyhow::format_err!("Error in writing {runtime_us}/{period_us} to {path}/cpu.rt.max"))?;
+        .map_err(|_| anyhow::format_err!("Error in writing '{runtime_us} {period_us}' to {path}/cpu.rt.max"))?;
 
     info!("Set runtime/period {runtime_us}/{period_us} us to {path}/cpu.rt.max");
 
@@ -101,7 +102,7 @@ pub fn set_cgroup(name: &str, runtime: HCBSTime, period: HCBSTime) -> anyhow::Re
         format!("{path}/cpu.rt.max"),
         format!("{runtime_us} {period_us}")
     )
-        .map_err(|_| anyhow::format_err!("Error in writing {runtime_us}/{period_us} to {path}/cpu.rt.max"))?;
+        .map_err(|_| anyhow::format_err!("Error in writing '{runtime_us} {period_us}' to {path}/cpu.rt.max"))?;
 
     info!("Set runtime/period {runtime_us}/{period_us} us to {path}/cpu.rt.max");
 

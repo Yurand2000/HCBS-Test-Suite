@@ -14,6 +14,7 @@ pub mod prelude {
         __println_debug,
         __read_file,
         __read_file_parse,
+        __read_file_parse_if_exists,
         __write_file,
         Skippable,
         mount_debug_fs,
@@ -128,6 +129,21 @@ pub fn __read_file_parse<P, F, U, E>(file: P, mut parse: F) -> anyhow::Result<U>
     std::fs::read_to_string(file.as_ref())
         .map_err(|err| anyhow::format_err!("Error in reading file {file}: {err}"))
         .and_then(|data| parse(data).map_err(|err| anyhow::format_err!("Error in parsing file {file}: {err}")))
+}
+
+pub fn __read_file_parse_if_exists<P, F, U, E>(file: P, mut parse: F) -> anyhow::Result<Option<U>>
+    where
+        P: AsRef<std::path::Path> + std::fmt::Display,
+        F: FnMut(String) -> Result<U, E>,
+        E: std::fmt::Display
+{
+    if !file.as_ref().is_file() {
+        return Ok(None);
+    }
+
+    std::fs::read_to_string(file.as_ref())
+        .map_err(|err| anyhow::format_err!("Error in reading file {file}: {err}"))
+        .and_then(|data| parse(data).map(|v| Some(v)).map_err(|err| anyhow::format_err!("Error in parsing file {file}: {err}")))
 }
 
 pub fn __write_file<P, C>(file: P, data: C) -> anyhow::Result<()>
