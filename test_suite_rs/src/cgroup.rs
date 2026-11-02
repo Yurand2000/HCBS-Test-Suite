@@ -160,6 +160,8 @@ pub fn delete_cgroup(name: &str) -> anyhow::Result<()> {
 
     let path = cgroup_abs_path(name);
 
+    set_cgroup_max(&name)?;
+
     std::fs::remove_dir(&path)
         .or_else(|_| {
             // Try to give the kernel some time to cleanup the system as this

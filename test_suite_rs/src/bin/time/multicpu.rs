@@ -8,7 +8,19 @@ pub struct MyArgs {
     #[arg(short = 'c', long = "cgroup", default_value = "g0", value_name = "name")]
     pub cgroup: String,
 
-    /// cgroup's configuration
+    /// cgroup's runtime
+    #[arg(short = 'r', long = "runtime", default_value = "0", value_name = "ms: u64")]
+    pub runtime_ms: u64,
+
+    /// cgroup's period
+    #[arg(short = 'p', long = "period", default_value = "0", value_name = "ms: u64")]
+    pub period_ms: u64,
+
+    /// task's allowed cpus
+    #[arg(long = "cpu-set", value_parser = <pid::CpuSet as std::str::FromStr>::from_str)]
+    pub cpu_set: Option<pid::CpuSet>,
+
+    /// cgroup's override configuration
     #[arg(short = 'C', long = "config", value_name = "config-tuple", num_args = 1.., value_parser= CgroupConfigSet::parse_config)]
     pub config: Vec<CgroupConfigSet>,
 
@@ -27,6 +39,25 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
     }
 
     let mut single_cpu_bws = HashMap::new();
+    let full_cpuset =
+        if let Some(ref cpuset) = args.cpu_set {
+            cpuset.clone()
+        } else {
+            args.config.iter()
+            .fold(pid::CpuSet::empty(), |mut acc, config| {
+                for cpu in config.cpu_set.iter() {
+                    acc = acc.add_cpu(*cpu);
+                }
+
+                acc
+            })
+        };
+
+    let bw = args.runtime_ms as f64 / args.period_ms as f64;
+    for cpu in full_cpuset.iter() {
+        single_cpu_bws.insert(cpu, bw);
+    }
+
     for CgroupConfigSet { runtime_ms, period_ms, cpu_set } in args.config.iter() {
         for cpu in cpu_set.iter() {
             let bw = *runtime_ms as f64 / *period_ms as f64;
@@ -38,7 +69,8 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
     let max_expected_bw = f64::min(total_cgroup_bw, args.num_tasks as f64);
     let max_error = 0.01;
 
-    let mut test_header = format!("time multi c{} n{}", args.cgroup, args.num_tasks);
+    let mut test_header = format!("time multi c{} n{} r{} p{} set{:?}",
+        args.cgroup, args.num_tasks, args.runtime_ms, args.period_ms, args.cpu_set);
     for CgroupConfigSet { runtime_ms, period_ms, cpu_set } in args.config.iter() {
         test_header += &format!(" C{}/{}/{:?}", runtime_ms, period_ms, cpu_set);
     }
@@ -72,12 +104,38 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 }
 
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<Skippable<f64>> {
-    assert!(args.config.len() >= 1);
-
     // run the tasks
     let mut cgroup = HCBSCgroup::new(&args.cgroup)?
         .with_force_kill(true);
-    cgroup.set_cgroup_us(Time::zero(), Time::zero())?;
+
+    let full_cpuset =
+        if let Some(cpuset) = args.cpu_set {
+            cpuset
+        } else {
+            args.config.iter()
+            .fold(pid::CpuSet::empty(), |mut acc, config| {
+                for cpu in config.cpu_set.iter() {
+                    acc = acc.add_cpu(*cpu);
+                }
+
+                acc
+            })
+        };
+
+    if !full_cpuset.is_subset(&pid::CpuSet::online()?) {
+        return Ok(Skippable::Skipped(anyhow::format_err!("Not enough CPUs")));
+    }
+
+    if full_cpuset.num_cpus() == 0 {
+        return Err(anyhow::format_err!("No CPUs requested"));
+    }
+
+    if args.runtime_ms == 0 && args.config.is_empty() {
+        return Err(anyhow::format_err!("No active CPU requested"));
+    }
+
+    cgroup.set_cgroup_cpumask(&full_cpuset)?;
+    cgroup.set_cgroup_us(Time::millis(args.runtime_ms as f64), Time::millis(args.period_ms as f64))?;
 
     for CgroupConfigSet { runtime_ms, period_ms, cpu_set } in args.config.into_iter() {
         cgroup.set_cgroup_override(&cpu_set, Time::millis(runtime_ms as f64), Time::millis(period_ms as f64))?;
