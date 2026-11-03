@@ -10,6 +10,7 @@ pub mod prelude {
         create_ctrlc_handler,
         wait_loop,
         wait_loop_periodic_fn,
+        cpu_hotplug,
         __shell,
         __println_debug,
         __read_file,
@@ -90,6 +91,13 @@ pub fn wait_loop_periodic_fn<F>(period_secs: f32, max_time: Option<u64>, ctrlc_f
     }
 
     Ok(())
+}
+
+pub fn cpu_hotplug(cpu: libtux::cpu::CpuID, hotplug: bool) -> anyhow::Result<()> {
+    __write_file(
+        format!("/sys/devices/system/cpu/cpu{cpu}/online"),
+        if hotplug { "1" } else { "0" }
+    )
 }
 
 pub fn __println_debug<'a, F: FnOnce() -> String>(fun: F) {

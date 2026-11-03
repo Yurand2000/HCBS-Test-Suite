@@ -97,6 +97,29 @@ fn set_runtime_zero_to_active_multi(cgroup_name: &str) -> anyhow::Result<()> {
     }
 }
 
+fn hotunplug_test(cgroup_name: &str, mask: pid::CpuSet, offline_cpu: CpuID, must_fail: bool) -> anyhow::Result<()> {
+    let mut cgroup = HCBSCgroup::new(cgroup_name)?;
+    cgroup.set_cgroup_cpumask(&mask)?;
+    cgroup.set_cgroup_us(Time::micros(10_000f64), Time::micros(100_000f64))?;
+
+    let mut yes = run_yes()?;
+
+    yes.set_sched_policy(pid::SchedPolicy::RR(50), pid::SchedFlags::empty()).map_err(|err| err.into())
+        .and_then(|_| cgroup.assign_process(yes).map(|_| ()).map_err(|(_, err)| err))?;
+
+    let hotplug_res = cpu_hotplug(offline_cpu, false);
+
+    match (hotplug_res, must_fail) {
+        (Ok(_), true) => anyhow::bail!("Expected hotunplug failure!"),
+        (Err(e), false) => anyhow::bail!("Expected hotunplug to succeed: {e}"),
+        _ => (),
+    }
+
+    cpu_hotplug(offline_cpu, true)?;
+
+    Ok(())
+}
+
 pub fn main() -> anyhow::Result<()> {
     assign_pid_to_cgroup(".", Pid(std::process::id()))?;
     pid::set_sched_policy(Pid(std::process::id()), pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
@@ -153,6 +176,13 @@ pub fn main() -> anyhow::Result<()> {
     // set runtime to zero of running cgroup
     batch_test_header("runtime_0_while_running_multi", test_category);
     batch_test_result(set_runtime_zero_to_active_multi("g0"))?;
+
+    // hotplug tests
+    batch_test_header("hotunplug_cpu_3_not_used", test_category);
+    batch_test_result(hotunplug_test("g0", "0-2".parse()?, CpuID(3), false))?;
+
+    batch_test_header("hotunplug_fail_cpu_3_used", test_category);
+    batch_test_result(hotunplug_test("g0", "0-3".parse()?, CpuID(3), true))?;
 
     Ok(())
 }
