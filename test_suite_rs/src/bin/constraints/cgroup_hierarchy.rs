@@ -103,6 +103,17 @@ fn create_hcbs_graph(graph: &HCBSNode, parent: &str, multicpu_graph: bool) -> an
 }
 
 fn test_internal_runtime_hcbs_graph(graph: &HCBSNode, parent: &str, multicpu: bool) -> anyhow::Result<()> {
+    test_internal_runtime_hcbs_graph_single(graph, parent, multicpu)?;
+
+    let parent =
+        if parent == "" { graph.id.as_str() }
+        else { &format!("{}/{}", parent, graph.id) };
+    graph.children.iter()
+        .map(|child| test_internal_runtime_hcbs_graph(child, parent, multicpu))
+        .collect()
+}
+
+fn test_internal_runtime_hcbs_graph_single(graph: &HCBSNode, parent: &str, multicpu: bool) -> anyhow::Result<()> {
     let name =
         if parent == "" {
             return Ok(());
@@ -110,24 +121,30 @@ fn test_internal_runtime_hcbs_graph(graph: &HCBSNode, parent: &str, multicpu: bo
             format!("{}/{}", parent, graph.id)
         };
 
-    let file = format!("/sys/fs/cgroup/{name}/cpu.rt.internal");
+    let file = format!("/sys/fs/cgroup/{name}/cpu.rt.effective.local");
 
     if multicpu {
         let parse_single = |s: &str| -> anyhow::Result<_> {
             let mut s = s.split_whitespace();
             let cpu = s.next()
                 .ok_or_else(|| anyhow::format_err!("Expected cpuid"))
-                .and_then(|s| Ok(CpuID(s.parse::<u32>()?)))?;
+                .and_then(|s| Ok(CpuID(s.parse::<u32>().map_err(|err| anyhow::format_err!("cpuid parse error: {err}"))?)))?;
 
             let runtime = s.next()
                 .ok_or_else(|| anyhow::format_err!("Expected runtime"))
-                .and_then(|s| s.strip_prefix("runtime=").ok_or_else(|| anyhow::format_err!("Expected runtime")))
-                .and_then(|s| Ok(Time::millis(s.parse::<f64>()?)))?;
+                .and_then(|s| s.strip_prefix("runtime=").ok_or_else(|| anyhow::format_err!("Expected runtime")))?;
+
+            if runtime == "max" {
+                return Ok((cpu, Time::zero(), Time::zero()));
+            }
+
+            let runtime =
+                Time::micros(runtime.parse::<f64>().map_err(|err| anyhow::format_err!("Runtime parse error: {err}"))?);
 
             let period = s.next()
                 .ok_or_else(|| anyhow::format_err!("Expected period"))
                 .and_then(|s| s.strip_prefix("period=").ok_or_else(|| anyhow::format_err!("Expected period")))
-                .and_then(|s| Ok(Time::millis(s.parse::<f64>()?)))?;
+                .and_then(|s| Ok(Time::micros(s.parse::<f64>().map_err(|err| anyhow::format_err!("Period parse error: {err}"))?)))?;
 
             Ok((cpu, runtime, period))
         };

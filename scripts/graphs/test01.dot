@@ -12,7 +12,7 @@ strict digraph G {
     g4   [label = "g4: 1 30/100\nin: 1 30",
             runtime =  30,  period =  100,  internal =  "1 30",  cpuset = "1"    ]
     g5   [label = "g5: 3 30/200\nin: 3 30",
-            runtime =  30,  period =  200,  internal =  "1 30",  cpuset = "3"    ]
+            runtime =  30,  period =  200,  internal =  "3 30",  cpuset = "3"    ]
     g6   [label = "g6: 0-2 max",
             runtime = max,  cpuset = "0-2"  ]
     g7   [label = "g7: 0 max",

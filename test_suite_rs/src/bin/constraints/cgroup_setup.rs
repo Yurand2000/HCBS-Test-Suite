@@ -78,7 +78,9 @@ fn set_runtime_zero_to_active(cgroup_name: &str) -> anyhow::Result<()> {
 }
 
 fn set_runtime_zero_to_active_multi(cgroup_name: &str) -> anyhow::Result<()> {
-    let mut cgroup = HCBSCgroup::new(cgroup_name)?;
+    let mut cgroup = HCBSCgroup::new(cgroup_name)?
+        .with_force_kill(true);
+
     cgroup.set_cgroup_cpumask(&CpuSet::single(CpuID(0)))?;
     cgroup.set_cgroup_us(Time::zero(), Time::micros(100_000f64))?;
     cgroup.set_cgroup_override(&CpuSet::single(CpuID(0)), Time::micros(10_000f64), Time::micros(100_000f64))?;
@@ -98,7 +100,9 @@ fn set_runtime_zero_to_active_multi(cgroup_name: &str) -> anyhow::Result<()> {
 }
 
 fn hotunplug_test(cgroup_name: &str, mask: pid::CpuSet, offline_cpu: CpuID, must_fail: bool) -> anyhow::Result<()> {
-    let mut cgroup = HCBSCgroup::new(cgroup_name)?;
+    let mut cgroup = HCBSCgroup::new(cgroup_name)?
+        .with_force_kill(true);
+
     cgroup.set_cgroup_cpumask(&mask)?;
     cgroup.set_cgroup_us(Time::micros(10_000f64), Time::micros(100_000f64))?;
 
