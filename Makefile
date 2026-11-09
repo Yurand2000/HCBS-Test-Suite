@@ -16,7 +16,7 @@ install-tar: $(BUILD)/install.tar.gz
 
 # Taskset builder is currently under costruction
 # build: cgroup periodic scripts tasksets
-build: cgroup periodic rt-app scripts tasksets binutils perfetto
+build: cgroup periodic rt-app rt-synth scripts tasksets binutils perfetto
 
 install: build
 	mkdir -p $(O)
@@ -41,13 +41,23 @@ $(BUILD)/cgroup.keep: $(BUILD)/mnt/.keep $(BUILD)/.keep
 
 # tasksets
 .PHONY: tasksets
-tasksets: $(BUILD)/mnt/root/tasksets/.keep
+tasksets: $(BUILD)/mnt/root/tasksets/.keep $(BUILD)/mnt/root/tasksets_us/.keep
 
 .PRECIOUS: $(BUILD)/mnt/root/tasksets/.keep
 $(BUILD)/mnt/root/tasksets/.keep: $(BUILD)/.keep
 	cd test_suite_rs && \
-	cargo run --bin taskset_gen --release \
-	--target-dir "$(BUILD)/test_suite" -- -O $(BUILD)/mnt/root/tasksets
+		cargo run --bin taskset_gen --release \
+		--target-dir "$(BUILD)/test_suite" -- -O $(BUILD)/mnt/root/tasksets
+	touch $@
+
+.PRECIOUS: $(BUILD)/mnt/root/tasksets_us/.keep
+$(BUILD)/mnt/root/tasksets_us/.keep: $(BUILD)/.keep
+	cd test_suite_rs && \
+		cargo run --bin taskset_gen --release \
+		--target-dir "$(BUILD)/test_suite" -- \
+		-p 1000 -P 10000 --p-gran 100 \
+		-c 1000 -C 10000 --c-gran 1000 \
+		-O $(BUILD)/mnt/root/tasksets_us
 	touch $@
 
 # extra scripts
@@ -82,6 +92,30 @@ $(BUILD)/mnt/root/bin/periodic_thread: $(BUILD)/PeriodicTask/.keep
 	make -C $(<D) periodic_thread
 	mkdir -p $(@D)
 	cp -u $(<D)/periodic_thread $@
+
+# rt-synth task runner
+.PHONY: rt-synth
+rt-synth: $(BUILD)/mnt/root/bin/rt-synth $(BUILD)/mnt/root/bin/rt-synth-calibrate
+
+$(BUILD)/rt-synth/.keep: $(BUILD)/.keep
+	git init $(@D)
+	git -C $(@D) fetch --depth=1 \
+		https://github.com/Yurand2000/rt-synth.git
+	git -C $(@D) checkout FETCH_HEAD
+	touch $@
+
+RUSTFLAGS="-C target-feature=+crt-static"
+$(BUILD)/mnt/root/bin/rt-synth-calibrate: $(BUILD)/rt-synth/.keep
+	cd $(<D) && \
+		RUSTFLAGS=$(RUSTFLAGS) \
+		cargo build --release --target x86_64-unknown-linux-gnu --bin calibrate
+	cp -u $(<D)/target/x86_64-unknown-linux-gnu/release/calibrate $@
+
+$(BUILD)/mnt/root/bin/rt-synth: $(BUILD)/rt-synth/.keep
+	cd $(<D) && \
+		RUSTFLAGS=$(RUSTFLAGS) \
+		cargo build --release --target x86_64-unknown-linux-gnu --bin periodic_task
+	cp -u $(<D)/target/x86_64-unknown-linux-gnu/release/periodic_task $@
 
 # rt-app task runner
 .PHONY: rt-app
@@ -166,7 +200,7 @@ $(BUILD)/mnt/bin/nm: $(BUILD)/binutils/bin/.keep
 
 # perfetto
 .PHONY: perfetto
-perfetto: $(BUILD)/mnt/bin/tracebox
+perfetto: $(BUILD)/mnt/root/bin/tracebox
 
 $(BUILD)/perfetto-src/.keep: $(BUILD)/.keep
 	git clone --depth 1 https://github.com/google/perfetto $(@D)
@@ -180,7 +214,7 @@ $(BUILD)/perfetto/.keep: $(BUILD)/perfetto-src/.keep $(BUILD)/perfetto/args.gn
 	cd $(<D); tools/ninja -C $(@D) -j $(shell nproc) tracebox
 	touch $@
 
-$(BUILD)/mnt/bin/tracebox: $(BUILD)/perfetto/.keep
+$(BUILD)/mnt/root/bin/tracebox: $(BUILD)/perfetto/.keep
 	cp -u $(<D)/tracebox $@
 	chmod +x $@
 

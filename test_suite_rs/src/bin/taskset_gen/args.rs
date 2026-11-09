@@ -37,16 +37,16 @@ pub struct TasksetGeneratorArgs {
     pub max_num_tasks: u64,
 
     /// Minimum period of a task
-    #[arg(short='p', default_value="100", value_name="PERIOD ms")]
-    pub min_task_period_ms: u64,
+    #[arg(short='p', default_value="100000", value_name="PERIOD us")]
+    pub min_task_period_us: u64,
 
     /// Maximum period of a task
-    #[arg(short='P', default_value="500", value_name="PERIOD ms")]
-    pub max_task_period_ms: u64,
+    #[arg(short='P', default_value="500000", value_name="PERIOD us")]
+    pub max_task_period_us: u64,
 
     /// Period granularity of a task
-    #[arg(long="p-gran", default_value="10", value_name="PERIOD ms")]
-    pub step_task_period_ms: u64,
+    #[arg(long="p-gran", default_value="10000", value_name="PERIOD us")]
+    pub step_task_period_us: u64,
 
     /// Minimum taskset total utilization
     #[arg(short='u', default_value="0.5", value_name="UTILIZATION")]
@@ -65,16 +65,16 @@ pub struct TasksetGeneratorArgs {
 #[derive(clap::Args)]
 pub struct AnalysisArgs {
     /// Minimum cgroup period
-    #[arg(short='c', default_value="10", value_name="PERIOD ms")]
-    pub min_cgroup_period_ms: u64,
+    #[arg(short='c', default_value="10000", value_name="PERIOD us")]
+    pub min_cgroup_period_us: u64,
 
     /// Maximum cgroup period
-    #[arg(short='C', default_value="100", value_name="PERIOD ms")]
-    pub max_cgroup_period_ms: u64,
+    #[arg(short='C', default_value="100000", value_name="PERIOD us")]
+    pub max_cgroup_period_us: u64,
 
     /// Cgroup period granularity
-    #[arg(long="c-gran", default_value="30", value_name="PERIOD ms")]
-    pub step_cgroup_period_ms: u64,
+    #[arg(long="c-gran", default_value="30000", value_name="PERIOD us")]
+    pub step_cgroup_period_us: u64,
 
     /// Max bandwidth per core in cgroup
     #[arg(long="max-core-bw", default_value="0.9", value_name="BANDWIDTH")]
@@ -106,10 +106,10 @@ impl Into<TasksetGeneratorOptions> for TasksetGeneratorArgs {
                 self.min_num_tasks,
                 self.max_num_tasks,
             ),
-            task_period_ms: (
-                Time::millis(self.min_task_period_ms as f64),
-                Time::millis(self.max_task_period_ms as f64),
-                Time::millis(self.step_task_period_ms as f64),
+            task_period: (
+                Time::micros(self.min_task_period_us as f64),
+                Time::micros(self.max_task_period_us as f64),
+                Time::micros(self.step_task_period_us as f64),
             ),
             taskset_utilization: (
                 self.min_taskset_utilization,
@@ -124,9 +124,9 @@ impl Into<AnalysisOptions> for AnalysisArgs {
     fn into(self) -> AnalysisOptions {
         AnalysisOptions {
             cgroup_period: (
-                Time::millis(self.min_cgroup_period_ms as f64),
-                Time::millis(self.max_cgroup_period_ms as f64),
-                Time::millis(self.step_cgroup_period_ms as f64),
+                Time::micros(self.min_cgroup_period_us as f64),
+                Time::micros(self.max_cgroup_period_us as f64),
+                Time::micros(self.step_cgroup_period_us as f64),
             ),
             max_per_core_bandwidth:
                 self.max_per_core_bandwidth,

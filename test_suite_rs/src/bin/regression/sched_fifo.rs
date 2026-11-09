@@ -60,12 +60,12 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 }
 
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, f64)> {
-    assign_pid_to_cgroup(".", Pid(std::process::id()))?;
-    pid::set_sched_policy(Pid(std::process::id()), pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
+    assign_pid_to_cgroup(".", Pid::current())?;
+    pid::set_sched_policy(Pid::current(), pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
 
     let cpus = pid::CpuSet::online_cpus();
     let mut cgroup = HCBSCgroup::new(&args.cgroup)?
-        .with_force_kill(false);
+        .with_force_kill(true);
     cgroup.set_cgroup_us(
         Time::millis(args.runtime_ms as f64),
         Time::millis(args.period_ms as f64)

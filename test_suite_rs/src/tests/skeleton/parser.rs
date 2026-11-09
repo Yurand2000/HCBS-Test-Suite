@@ -28,11 +28,11 @@ pub fn parse_taskset(data: &str) -> anyhow::Result<NamedTaskset> {
     let name_parser = || map(take_while1(|ch: char| !ch.is_whitespace()), |name: &str| name.to_owned());
     let line_parser = map(
         (space0, u64_parser(), space1, u64_parser(), space1, u64_parser(), space0),
-        |(_, runtime_ms, _, deadline_ms, _, period_ms, _)|
+        |(_, runtime_us, _, deadline_us, _, period_us, _)|
             LLTask {
-                wcet: Time::millis(runtime_ms as f64),
-                deadline: Time::millis(deadline_ms as f64),
-                period: Time::millis(period_ms as f64),
+                wcet: Time::micros(runtime_us as f64),
+                deadline: Time::micros(deadline_us as f64),
+                period: Time::micros(period_us as f64),
             }
     );
 
@@ -61,7 +61,7 @@ pub fn serialize_taskset(taskset: &NamedTaskset) -> anyhow::Result<String> {
     let mut out_string = format!("Taskset {}\n", taskset.name);
     taskset.tasks.iter()
         .for_each(|task| {
-            out_string += &format!("{:.0} {:.0} {:.0}\n", task.wcet.as_millis(), task.deadline.as_millis(), task.period.as_millis());
+            out_string += &format!("{:.0} {:.0} {:.0}\n", task.wcet.as_micros(), task.deadline.as_micros(), task.period.as_micros());
         });
 
     Ok(out_string)
@@ -72,12 +72,12 @@ pub fn parse_config(data: &str) -> anyhow::Result<NamedConfig> {
     let name_parser = || map(take_while1(|ch: char| !ch.is_whitespace()), |name: &str| name.to_owned());
     let mut parser = map(
         (tag("Config"), space1, name_parser(), space1, u64_parser(), space1, u64_parser(), space1, u64_parser()),
-        |(_, _, name, _, cpus, _, runtime_ms, _, period_ms)|
+        |(_, _, name, _, cpus, _, runtime_us, _, period_us)|
             NamedConfig {
                 name,
                 cpus,
-                runtime: Time::millis(runtime_ms as f64),
-                period: Time::millis(period_ms as f64),
+                runtime: Time::micros(runtime_us as f64),
+                period: Time::micros(period_us as f64),
             }
     );
 
@@ -90,7 +90,7 @@ pub fn serialize_config(config: &NamedConfig) -> anyhow::Result<String> {
     if config.name.chars().any(|ch| ch.is_whitespace()) {
         anyhow::bail!("Config \'{}\' contains whitespaces in the name, cannot serialize.", config.name)
     } else {
-        Ok(format!("Config {} {} {:.0} {:.0}", config.name, config.cpus, config.runtime.as_millis(), config.period.as_millis()))
+        Ok(format!("Config {} {} {:.0} {:.0}", config.name, config.cpus, config.runtime.as_micros(), config.period.as_micros()))
     }
 }
 

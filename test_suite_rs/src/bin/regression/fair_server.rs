@@ -43,7 +43,7 @@ pub fn batch_runner(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Resul
 pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<f64> {
     let cpus = pid::CpuSet::online_cpus();
 
-    let self_id = Pid(std::process::id());
+    let self_id = Pid::current();
 
     assign_pid_to_cgroup(".", self_id)?;
     pid::set_sched_policy(self_id, pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;

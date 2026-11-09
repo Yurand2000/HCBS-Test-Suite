@@ -17,15 +17,16 @@ pub mod prelude {
 pub mod parser;
 use parser::read_all_file;
 
-pub fn run_taskset_array<FnSpeed, FnRun>(
+pub fn run_taskset_array<T, FnSpeed, FnRun>(
     args: &RunnerArgsAll,
     fn_compute_cpu_speed: FnSpeed,
     fn_run_taskset: FnRun,
 ) -> anyhow::Result<Vec<TasksetRunResult>>
     where
+        T:              std::fmt::Display + Clone,
         FnSpeed:        Fn()
-                          -> anyhow::Result<u64>,
-        FnRun:          Fn(TasksetRun, &RunnerArgsBase, Option<u64>)
+                          -> anyhow::Result<T>,
+        FnRun:          Fn(TasksetRun, &RunnerArgsBase, Option<T>)
                             -> anyhow::Result<TasksetRunResult>,
 {
     check_root_cgroup(&args.args)?;
@@ -59,7 +60,7 @@ pub fn run_taskset_array<FnSpeed, FnRun>(
     let mut failures = 0u64;
     let mut results = Vec::with_capacity(taskset_runs.len());
     for run in taskset_runs.into_iter() {
-        match run_taskset_one(run, &args.args, Some(cycles), &fn_run_taskset)? {
+        match run_taskset_one(run, &args.args, Some(cycles.clone()), &fn_run_taskset)? {
             Some(result) => {
                 if compute_result_insights(&result).num_overruns > 0 {
                     failures += 1;
@@ -78,15 +79,16 @@ pub fn run_taskset_array<FnSpeed, FnRun>(
     Ok(results)
 }
 
-pub fn run_taskset_single<FnSpeed, FnRun>(
+pub fn run_taskset_single<T, FnSpeed, FnRun>(
     args: &RunnerArgsSingle,
     fn_compute_cpu_speed: FnSpeed,
     fn_run_taskset: FnRun,
 ) -> anyhow::Result<Option<TasksetRunResult>>
     where
+        T:              std::fmt::Display,
         FnSpeed:        Fn()
-                            -> anyhow::Result<u64>,
-        FnRun:          Fn(TasksetRun, &RunnerArgsBase, Option<u64>)
+                            -> anyhow::Result<T>,
+        FnRun:          Fn(TasksetRun, &RunnerArgsBase, Option<T>)
                             -> anyhow::Result<TasksetRunResult>,
 {
     check_root_cgroup(&args.args)?;
@@ -241,14 +243,15 @@ fn can_run_filter(
     !std::path::Path::new(&run.results_file).exists()
 }
 
-fn run_taskset_one<FnRun>(
+fn run_taskset_one<T, FnRun>(
     run: TasksetRun,
     args: &RunnerArgsBase,
-    cycles: Option<u64>,
+    cycles: Option<T>,
     run_taskset: &FnRun,
 ) -> anyhow::Result<Option<TasksetRunResult>>
     where
-        FnRun:          Fn(TasksetRun, &RunnerArgsBase, Option<u64>)
+        T:              std::fmt::Display,
+        FnRun:          Fn(TasksetRun, &RunnerArgsBase, Option<T>)
                             -> anyhow::Result<TasksetRunResult>,
 {
     let already_run = std::path::Path::new(&run.results_file).exists();

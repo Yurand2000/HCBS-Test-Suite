@@ -60,11 +60,12 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>, mult
     let cpu_set = pid::CpuSet::online()?.any_subset(run.config.cpus)?;
     let mut cgroup = HCBSCgroup::new(&args.cgroup)?
         .with_force_kill(true);
-    if !multi_runtime  {
-        cgroup.set_cgroup_us(run.config.runtime, run.config.period)?;
-    } else {
-        unimplemented!("Cannot set multiCPU bandwidth");
+
+    if multi_runtime {
+        cgroup.set_cgroup_cpumask(&cpu_set)?;
     }
+
+    cgroup.set_cgroup_us(run.config.runtime, run.config.period)?;
 
     let self_proc = cgroup.assign_process(HCBSProcess::SelfProc).map_err(|(_, err)| err)?;
     self_proc.set_sched_policy(pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
@@ -99,7 +100,7 @@ fn run_taskset(run: TasksetRun, args: &RunnerArgsBase, cycles: Option<u64>, mult
 fn compute_cpu_speed() -> anyhow::Result<u64> {
     let out_file = format!("/tmp/calibration_data.txt");
 
-    let self_pid = Pid(std::process::id());
+    let self_pid = Pid::current();
 
     // run periodic thread to calibrate
     assign_pid_to_cgroup(".", self_pid)?;

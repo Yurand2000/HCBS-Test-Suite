@@ -6,6 +6,7 @@ print_help() {
     echo "Usage: $0 [<test_suite>] | $0 [help|-h|--help]"
     echo "Available Test Suites:"
     echo "-   all (or no argument) : run all test suites"
+    echo "-                  setup : just run preliminary setup"
     echo "-            constraints : run constraints tests"
     echo "-                   time : run time tests (~100s runtime)"
     echo "-             regression : run regression tests (~17m runtime)"
@@ -14,7 +15,9 @@ print_help() {
     echo "- ---------------------- : excluded tests from the all command -------------"
     echo "-          random-stress : run randomly generated stress tests (~1h runtime)"
     echo "-               tasksets : run taskset tests - periodic-thread backend"
+    echo "-      tasksets-rt-synth : run taskset tests - rt-synth backend"
     echo "-        tasksets-rt-app : run taskset tests - rt-app backend"
+    echo "-   tasksets-us-rt-synth : run taskset-us tests - rt-synth backend"
 }
 
 setup() {
@@ -23,7 +26,7 @@ setup() {
         ./test_suite/tools mount-cgroup-fs       &&
         ./test_suite/tools mount-cgroup-cpu      &&
         ./test_suite/tools mount-debug-fs        &&
-        ./test_suite/tools hrtick -e
+        ./test_suite/tools hrtick -e true
 
     ) || exit 1
 
@@ -140,21 +143,25 @@ random_stress() {
 }
 
 tasksets() {
-    echo "* Taskset Tests - periodic-thread *"
-    if [ -d '/sys/kernel/debug/sched/ext_server' ]; then
-        TESTBINDIR=bin ./test_suite/taskset --runner periodic-thread all -b 0.95 -n $(nproc) -i ./tasksets -o ./tasksets_out || true
-    else
-        TESTBINDIR=bin ./test_suite/taskset --runner periodic-thread all -b 0.9 -n $(nproc) -i ./tasksets -o ./tasksets_out || true
-    fi
-}
+    local multi=""
+    local multi_str=""
+    local runner="$1"
+    local num_jobs="$2"
+    local taskset="$3"
+    local nproc="$(nproc)"
+    local max_bw="0.9"
 
-tasksets_rt_app() {
-    echo "* Taskset Tests - rt-app *"
-    if [ -d '/sys/kernel/debug/sched/ext_server' ]; then
-        TESTBINDIR=bin ./test_suite/taskset --runner rt-app all -b 0.95 -n $(nproc) -i ./tasksets -o ./tasksets_out || true
-    else
-        TESTBINDIR=bin ./test_suite/taskset --runner rt-app all -b 0.9 -n $(nproc) -i ./tasksets -o ./tasksets_out || true
+    if (./test_suite/tools check-multicpu > /dev/null); then
+        multi="--multi"
+        multi_str="- Multi "
     fi
+
+    if [ -d '/sys/kernel/debug/sched/ext_server' ]; then
+        max_bw="0.95"
+    fi
+
+    echo "* Taskset Tests $multi_str- $runner *"
+    TESTBINDIR=bin ./test_suite/taskset "$multi" --runner "$runner" all -j "$num_jobs" -b "$max_bw" -n "$nproc" -i "$taskset" -o "${taskset}_out" || true
 }
 
 export BATCH_TEST=1
@@ -177,9 +184,11 @@ elif [ $TEST_SUITE = "full" ]; then
     time_tests_multi
     regression
     random_stress
-    tasksets_rt_app
+    tasksets "rt-app" 200 "./tasksets"
 elif [ $TEST_SUITE = "help" ] || [ $TEST_SUITE = "-h" ] || [ $TEST_SUITE = "--help" ]; then
     print_help
+elif [ $TEST_SUITE = "setup" ]; then
+    setup
 elif [ $TEST_SUITE = "constraints" ]; then
     setup
     constraints
@@ -195,10 +204,16 @@ elif [ $TEST_SUITE = "random-stress" ]; then
     random_stress
 elif [ $TEST_SUITE = "tasksets" ]; then
     setup
-    tasksets
+    tasksets "periodic-thread" 200 "./tasksets"
+elif [ $TEST_SUITE = "tasksets-rt-synth" ]; then
+    setup
+    tasksets "rt-synth" 200 "./tasksets"
 elif [ $TEST_SUITE = "tasksets-rt-app" ]; then
     setup
-    tasksets_rt_app
+    tasksets "rt-app" 200 "./tasksets"
+elif [ $TEST_SUITE = "tasksets-us-rt-synth" ]; then
+    setup
+    tasksets "rt-synth" 10000 "./tasksets_us"
 else
     echo "Unknown test suite: $TEST_SUITE"
     print_help

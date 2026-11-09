@@ -9,7 +9,7 @@ pub mod uunifast;
 pub struct TasksetGeneratorOptions {
     pub tasksets_per_utilization: u64,
     pub num_tasks: (u64, u64),
-    pub task_period_ms: (Time, Time, Time),
+    pub task_period: (Time, Time, Time),
     pub taskset_utilization: (f64, f64, f64),
 }
 
@@ -21,7 +21,8 @@ pub fn generate_tasksets(
     let count = std::sync::atomic::AtomicU64::new(0);
     let (num_tasks_min, num_tasks_max) = options.num_tasks;
     let (util_min, util_max, util_step) = options.taskset_utilization;
-    let (period_min, period_max, period_step) = options.task_period_ms;
+    let (period_min, period_max, period_step) = options.task_period;
+    let wcet_min = Time::micros(50.0);
 
     float_iter(util_min, util_max, util_step)
     .flat_map(|taskset_util| {
@@ -57,16 +58,17 @@ pub fn generate_tasksets(
                         ).floor();
 
                     LLTask {
-                        wcet: (util * period).floor(),
+                        wcet: (util * period).floor().max(wcet_min),
                         deadline: period,
                         period: period,
                     }
                 }).collect();
 
-            tasks.sort_by_key(|task| std::cmp::Reverse(task.period));
+            tasks.sort_by_key(|task| task.period);
 
+            let task_num = tasks.len();
             let tasks = tasks.into_iter().enumerate()
-                .map(|(priority, task)| PriorityTask { task, priority } )
+                .map(|(priority, task)| PriorityTask { task, priority: task_num - priority } )
                 .collect();
 
             NamedTaskset {

@@ -121,8 +121,8 @@ fn hotunplug_test(cgroup_name: &str, mask: pid::CpuSet, offline_cpu: CpuID, must
 }
 
 pub fn main() -> anyhow::Result<()> {
-    assign_pid_to_cgroup(".", Pid(std::process::id()))?;
-    pid::set_sched_policy(Pid(std::process::id()), pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
+    assign_pid_to_cgroup(".", Pid::current())?;
+    pid::set_sched_policy(Pid::current(), pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
 
     // batch test utils
     let test_category = "constraints";

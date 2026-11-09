@@ -63,7 +63,7 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
     let main_fn = || {
         let cpus = pid::CpuSet::online_cpus();
         let mut cgroup = HCBSCgroup::new(&args.cgroup)?
-            .with_force_kill(false);
+            .with_force_kill(true);
         cgroup.set_cgroup_us(
             Time::millis(args.runtime_ms as f64),
             Time::millis(args.period_ms as f64)
@@ -115,8 +115,8 @@ pub fn main(args: MyArgs, ctrlc_flag: Option<ExitFlag>) -> anyhow::Result<(f64, 
         Ok((deadline_total_usage, cgroup_total_usage))
     };
 
-    assign_pid_to_cgroup(".", Pid(std::process::id()))?;
-    pid::set_sched_policy(Pid(std::process::id()), pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
+    assign_pid_to_cgroup(".", Pid::current())?;
+    pid::set_sched_policy(Pid::current(), pid::SchedPolicy::RR(99), pid::SchedFlags::RESET_ON_FORK)?;
 
     let rt_cgroup_runtime_orig = reduce_cgroups_runtime()?;
     let res = main_fn();

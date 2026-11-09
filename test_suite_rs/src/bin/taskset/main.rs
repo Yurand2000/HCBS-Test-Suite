@@ -6,7 +6,7 @@ pub struct Args {
     #[arg(long="runner", default_value="periodic-thread")]
     runner: Runner,
 
-    #[arg(long="multi-cpu", default_value="false")]
+    #[arg(long="multi", default_value="false")]
     multi: bool,
 
     #[command(subcommand)]
@@ -35,6 +35,8 @@ pub enum Command {
 enum Runner {
     #[value(name="periodic-thread")]
     PeriodicThread,
+    #[value(name="rt-synth")]
+    RtSynth,
     #[value(name="rt-app")]
     RtApp,
 }
@@ -48,6 +50,8 @@ fn main() -> anyhow::Result<()> {
         match (args.runner, args.multi) {
             (Runner::PeriodicThread, false) => periodic_thread::main_run_taskset_array,
             (Runner::PeriodicThread, true) => periodic_thread::main_run_taskset_array_multi,
+            (Runner::RtSynth, false) => rt_synth::main_run_taskset_array,
+            (Runner::RtSynth, true) => rt_synth::main_run_taskset_array_multi,
             (Runner::RtApp, false) => rt_app::main_run_taskset_array,
             (Runner::RtApp, true) => rt_app::main_run_taskset_array_multi,
         };
@@ -56,6 +60,8 @@ fn main() -> anyhow::Result<()> {
         match (args.runner, args.multi) {
             (Runner::PeriodicThread, false) => periodic_thread::main_run_taskset_single,
             (Runner::PeriodicThread, true) => periodic_thread::main_run_taskset_single_multi,
+            (Runner::RtSynth, false) => rt_synth::main_run_taskset_single,
+            (Runner::RtSynth, true) => rt_synth::main_run_taskset_single_multi,
             (Runner::RtApp, false) => rt_app::main_run_taskset_single,
             (Runner::RtApp, true) => rt_app::main_run_taskset_single_multi,
         };

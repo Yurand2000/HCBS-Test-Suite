@@ -137,7 +137,7 @@ impl HCBSCgroup {
 
         self.processes.clear();
 
-        let self_id = Pid(std::process::id());
+        let self_id = Pid::current();
         if is_pid_in_cgroup(&self.name, self_id).unwrap_or(false) {
             let _ = assign_pid_to_cgroup(".", self_id);
         }
@@ -176,7 +176,7 @@ impl HCBSProcess {
     pub fn id(&self) -> Pid {
         match self {
             HCBSProcess::Child(child) => Pid(child.id()),
-            HCBSProcess::SelfProc => Pid(std::process::id()),
+            HCBSProcess::SelfProc => Pid::current(),
         }
     }
 
